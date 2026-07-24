@@ -1,0 +1,72 @@
+{
+  "artifact_snapshot": "2026-07-24T00:00:00+02:00",
+  "engine": {
+    "file": "sim_engine.py",
+    "file_sha256": "9efdcdcc7d7eac147ffabc7c4432450985c19973732d1a2f77088053c4306d90",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "external_dependencies": [],
+    "operating_system_used": "Darwin 24.6.0 arm64",
+    "python_used": "3.13.7"
+  },
+  "final_report": {
+    "file": "HNL_38-0_RESEARCH_REPORT.md",
+    "file_sha256": "85ade3d5bc4dade068179aed22d1fdc8f9e0e3b0df58ffe72e24cc23939556f9"
+  },
+  "official_season_example": {
+    "command": "python3 sim_engine.py season --seed 38020261743 --output-dir outputs/season_38020261743",
+    "embedded_content_sha256": "5844d69f1d654c8c9a2dfe6e5b6a28589725a82159a55abdacbac66d60b1cfc4",
+    "json_file": "outputs/season_38020261743/season_seed_38020261743.json",
+    "json_file_sha256": "636d28b8bbedaa02f89dfc7dc0ae5388a90ec7306bf34df6ae837b19a8136fd0",
+    "markdown_file": "outputs/season_38020261743/season_seed_38020261743.md",
+    "markdown_file_sha256": "7f91a8ecf55b61262ddf5d06ccd672288d1f8ba8788ca5794d82ef674e828e9d",
+    "seed": 38020261743,
+    "seed_selection": {
+      "disclosure": "Selected for a readable deterministic regression example, not as an unbiased forecast draw.",
+      "first_seed_tested": 38020260724,
+      "first_seed_that_passed": 38020261743,
+      "offset": 1019,
+      "preset_criteria": {
+        "HNK Hajduk position": "1..4",
+        "HNK Rijeka position": "1..4",
+        "Korisnikov XI goals against": "22..46",
+        "Korisnikov XI goals for": "68..95",
+        "Korisnikov XI points": "78..94",
+        "Korisnikov XI position": 1,
+        "NK Rudes position": 10,
+        "league total goals": "455..505"
+      }
+    }
+  },
+  "showcase_38_example": {
+    "command": "python3 sim_engine.py challenge --seed 474 --matches 38 --showcase-boost 41 --output-dir outputs/challenge_seed_474",
+    "embedded_content_sha256": "940c7dc60c0c2f56c4b2efdbae9db4f3d44c21ec9b480d10b00c2b55ad640198",
+    "json_file": "outputs/challenge_seed_474/challenge_seed_474.json",
+    "json_file_sha256": "0cb1894f3b0b25b993a9536f4bd634bc006e6c7357f46ff49f6df6655e917382",
+    "markdown_file": "outputs/challenge_seed_474/challenge_seed_474.md",
+    "markdown_file_sha256": "ecdb385bb33ec71a46d9c7f3d0a726bbb4a3ff015b5d0e68962e1259f2d6a917",
+    "mode": "noncanonical_golden_path",
+    "search_command": "python3 sim_engine.py find-perfect --start-seed 1 --max-seeds 100000 --matches 38 --showcase-boost 41",
+    "seed": 474,
+    "showcase_boost": 41.0
+  },
+  "source_snapshots": [
+    {
+      "retrieved_on": "2026-07-24",
+      "role": "2026/27 rules",
+      "url": "https://hns.family/files/documents/33080/Propozicije%20natjecanja%20SuperSport%20HNL%2026-27.pdf"
+    },
+    {
+      "retrieved_on": "2026-07-24",
+      "role": "2025/26 calibration",
+      "url": "https://semafor.hns.family/en/competitions/100391485/supersport-hnl/details/"
+    }
+  ],
+  "tests": {
+    "command": "python3 -m unittest -v",
+    "file": "test_sim_engine.py",
+    "file_sha256": "bc402f80d23a982f71df0a6f0bea70ca6c7f12f677e16a0fd01fe7d24c10a1d5",
+    "result": "4 tests passed"
+  }
+}

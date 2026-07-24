@@ -1,0 +1,1847 @@
+{
+  "content_sha256": "940c7dc60c0c2f56c4b2efdbae9db4f3d44c21ec9b480d10b00c2b55ad640198",
+  "disclosure": "The challenge adds a test-only component boost to Korisnikov XI. It is a golden-path/reproducibility demo, not an HNL forecast.",
+  "engine_version": "0.1.0",
+  "matches": 38,
+  "mode": "noncanonical_38_match_showcase",
+  "perfect": true,
+  "record": {
+    "draws": 0,
+    "goal_difference": 92,
+    "goals_against": 27,
+    "goals_for": 119,
+    "losses": 0,
+    "points": 114,
+    "wins": 38
+  },
+  "results": [
+    {
+      "away": "HNK Hajduk",
+      "away_fatigue": 0.0,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.7178,
+      "away_yellow": 1,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.0,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 2.8817,
+      "home_yellow": 4,
+      "round": 1,
+      "scorers": [
+        {
+          "minute": 5,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 49,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.109,
+      "away_goals": 5,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 2.3528,
+      "away_yellow": 1,
+      "home": "HNK Rijeka",
+      "home_fatigue": 0.0,
+      "home_goals": 1,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8652,
+      "home_yellow": 3,
+      "round": 2,
+      "scorers": [
+        {
+          "minute": 5,
+          "player": "HNK Rijeka — RW",
+          "side": "home",
+          "team": "HNK Rijeka"
+        },
+        {
+          "minute": 18,
+          "player": "Joško Gvardiol (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 23,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 38,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 57,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 78,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Varaždin",
+      "away_fatigue": 0.0,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.6763,
+      "away_yellow": 5,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.1722,
+      "home_goals": 5,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 2.9637,
+      "home_yellow": 4,
+      "round": 3,
+      "scorers": [
+        {
+          "minute": 35,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 50,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 52,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 54,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 60,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2089,
+      "away_goals": 2,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4196,
+      "away_yellow": 4,
+      "home": "NK Istra 1961",
+      "home_fatigue": 0.0,
+      "home_goals": 1,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8261,
+      "home_yellow": 5,
+      "round": 4,
+      "scorers": [
+        {
+          "minute": 48,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 77,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 85,
+          "player": "NK Istra 1961 — CF",
+          "side": "home",
+          "team": "NK Istra 1961"
+        }
+      ]
+    },
+    {
+      "away": "NK Slaven Belupo",
+      "away_fatigue": 0.0,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.6691,
+      "away_yellow": 1,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2182,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.0311,
+      "home_yellow": 4,
+      "round": 5,
+      "scorers": [
+        {
+          "minute": 10,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 71,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2235,
+      "away_goals": 6,
+      "away_red": 1,
+      "away_red_minute": 45,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 1.9653,
+      "away_yellow": 2,
+      "home": "NK Osijek",
+      "home_fatigue": 0.0,
+      "home_goals": 3,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.9685,
+      "home_yellow": 3,
+      "round": 6,
+      "scorers": [
+        {
+          "minute": 16,
+          "player": "NK Osijek — CF",
+          "side": "home",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 21,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 30,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 56,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 57,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 58,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 69,
+          "player": "NK Osijek — AM",
+          "side": "home",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 74,
+          "player": "NK Osijek — RW",
+          "side": "home",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 88,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Lokomotiva",
+      "away_fatigue": 0.0,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 1,
+      "away_xg": 0.6631,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2266,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.1022,
+      "home_yellow": 3,
+      "round": 7,
+      "scorers": [
+        {
+          "minute": 6,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 22,
+          "player": "NK Lokomotiva — CF",
+          "side": "away",
+          "team": "NK Lokomotiva"
+        },
+        {
+          "minute": 43,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2285,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.5066,
+      "away_yellow": 3,
+      "home": "HNK Gorica",
+      "home_fatigue": 0.0,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8035,
+      "home_yellow": 2,
+      "round": 8,
+      "scorers": [
+        {
+          "minute": 55,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Rudeš",
+      "away_fatigue": 0.0,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.6267,
+      "away_yellow": 3,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2295,
+      "home_goals": 3,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.2005,
+      "home_yellow": 4,
+      "round": 9,
+      "scorers": [
+        {
+          "minute": 1,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 14,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 23,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 72,
+          "player": "NK Rudeš — RW",
+          "side": "away",
+          "team": "NK Rudeš"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2301,
+      "away_goals": 2,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.335,
+      "away_yellow": 1,
+      "home": "HNK Hajduk",
+      "home_fatigue": 0.109,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8829,
+      "home_yellow": 1,
+      "round": 10,
+      "scorers": [
+        {
+          "minute": 21,
+          "player": "Dominik Livaković (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 61,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Rijeka",
+      "away_fatigue": 0.109,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.7151,
+      "away_yellow": 0,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2305,
+      "home_goals": 3,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.839,
+      "home_yellow": 0,
+      "round": 11,
+      "scorers": [
+        {
+          "minute": 9,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 33,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 74,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2307,
+      "away_goals": 5,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4184,
+      "away_yellow": 1,
+      "home": "NK Varaždin",
+      "home_fatigue": 0.109,
+      "home_goals": 1,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8269,
+      "home_yellow": 2,
+      "round": 12,
+      "scorers": [
+        {
+          "minute": 1,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 14,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 14,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 15,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 57,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 57,
+          "player": "NK Varaždin — LW",
+          "side": "home",
+          "team": "NK Varaždin"
+        }
+      ]
+    },
+    {
+      "away": "NK Istra 1961",
+      "away_fatigue": 0.109,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.9013,
+      "away_yellow": 3,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2308,
+      "home_goals": 1,
+      "home_red": 1,
+      "home_red_minute": 16,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.041,
+      "home_yellow": 1,
+      "round": 13,
+      "scorers": [
+        {
+          "minute": 15,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2309,
+      "away_goals": 4,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4983,
+      "away_yellow": 1,
+      "home": "NK Slaven Belupo",
+      "home_fatigue": 0.109,
+      "home_goals": 1,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 0.8111,
+      "home_yellow": 3,
+      "round": 14,
+      "scorers": [
+        {
+          "minute": 1,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 9,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 60,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 61,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 71,
+          "player": "NK Slaven Belupo — CF",
+          "side": "home",
+          "team": "NK Slaven Belupo"
+        }
+      ]
+    },
+    {
+      "away": "NK Osijek",
+      "away_fatigue": 0.109,
+      "away_goals": 0,
+      "away_red": 1,
+      "away_red_minute": 39,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.5153,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2309,
+      "home_goals": 4,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.6669,
+      "home_yellow": 3,
+      "round": 15,
+      "scorers": [
+        {
+          "minute": 35,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 48,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 51,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 81,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2309,
+      "away_goals": 6,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 3.0343,
+      "away_yellow": 3,
+      "home": "NK Lokomotiva",
+      "home_fatigue": 0.109,
+      "home_goals": 1,
+      "home_red": 1,
+      "home_red_minute": 46,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 1,
+      "home_xg": 0.6451,
+      "home_yellow": 0,
+      "round": 16,
+      "scorers": [
+        {
+          "minute": 17,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 28,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 35,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 49,
+          "player": "Danijel Pranjić (Osijek 2003/04)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 59,
+          "player": "NK Lokomotiva — CF",
+          "side": "home",
+          "team": "NK Lokomotiva"
+        },
+        {
+          "minute": 60,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 60,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Gorica",
+      "away_fatigue": 0.109,
+      "away_goals": 2,
+      "away_red": 1,
+      "away_red_minute": 61,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.5683,
+      "away_yellow": 4,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2309,
+      "home_goals": 3,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.429,
+      "home_yellow": 3,
+      "round": 17,
+      "scorers": [
+        {
+          "minute": 3,
+          "player": "HNK Gorica — CF",
+          "side": "away",
+          "team": "HNK Gorica"
+        },
+        {
+          "minute": 19,
+          "player": "Josip Šimunić (Dinamo 2012/13)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 38,
+          "player": "Josip Šimunić (Dinamo 2012/13)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 47,
+          "player": "HNK Gorica — CF",
+          "side": "away",
+          "team": "HNK Gorica"
+        },
+        {
+          "minute": 85,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2309,
+      "away_goals": 1,
+      "away_red": 1,
+      "away_red_minute": 48,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.1387,
+      "away_yellow": 4,
+      "home": "NK Rudeš",
+      "home_fatigue": 0.109,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8944,
+      "home_yellow": 5,
+      "round": 18,
+      "scorers": [
+        {
+          "minute": 55,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Hajduk",
+      "away_fatigue": 0.1722,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.7233,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.2309,
+      "home_goals": 1,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.8492,
+      "home_yellow": 0,
+      "round": 19,
+      "scorers": [
+        {
+          "minute": 66,
+          "player": "Joško Gvardiol (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.2309,
+      "away_goals": 4,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.3367,
+      "away_yellow": 1,
+      "home": "HNK Rijeka",
+      "home_fatigue": 0.1722,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8684,
+      "home_yellow": 0,
+      "round": 20,
+      "scorers": [
+        {
+          "minute": 9,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 11,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 22,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 74,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Varaždin",
+      "away_fatigue": 0.1722,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 0.6772,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 5,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.9516,
+      "home_yellow": 3,
+      "round": 21,
+      "scorers": [
+        {
+          "minute": 5,
+          "player": "Danijel Pranjić (Osijek 2003/04)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 31,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 62,
+          "player": "Joško Gvardiol (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 77,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 80,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 5,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 3.2306,
+      "away_yellow": 3,
+      "home": "NK Istra 1961",
+      "home_fatigue": 0.1722,
+      "home_goals": 1,
+      "home_red": 1,
+      "home_red_minute": 17,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.5698,
+      "home_yellow": 0,
+      "round": 22,
+      "scorers": [
+        {
+          "minute": 19,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 26,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 29,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 36,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 50,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 59,
+          "player": "NK Istra 1961 — CF",
+          "side": "home",
+          "team": "NK Istra 1961"
+        }
+      ]
+    },
+    {
+      "away": "NK Slaven Belupo",
+      "away_fatigue": 0.1602,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.6649,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.0466,
+      "home_yellow": 3,
+      "round": 23,
+      "scorers": [
+        {
+          "minute": 50,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 54,
+          "player": "NK Slaven Belupo — LW",
+          "side": "away",
+          "team": "NK Slaven Belupo"
+        },
+        {
+          "minute": 90,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 3,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4753,
+      "away_yellow": 4,
+      "home": "NK Osijek",
+      "home_fatigue": 0.1722,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.8075,
+      "home_yellow": 1,
+      "round": 24,
+      "scorers": [
+        {
+          "minute": 26,
+          "player": "NK Osijek — RW",
+          "side": "home",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 34,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 55,
+          "player": "NK Osijek — AM",
+          "side": "home",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 68,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 83,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Lokomotiva",
+      "away_fatigue": 0.1722,
+      "away_goals": 3,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 1,
+      "away_xg": 0.6585,
+      "away_yellow": 5,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 5,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.1203,
+      "home_yellow": 2,
+      "round": 25,
+      "scorers": [
+        {
+          "minute": 7,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 18,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 23,
+          "player": "NK Lokomotiva — LW",
+          "side": "away",
+          "team": "NK Lokomotiva"
+        },
+        {
+          "minute": 29,
+          "player": "NK Lokomotiva — CF",
+          "side": "away",
+          "team": "NK Lokomotiva"
+        },
+        {
+          "minute": 34,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 56,
+          "player": "NK Lokomotiva — CF",
+          "side": "away",
+          "team": "NK Lokomotiva"
+        },
+        {
+          "minute": 57,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 76,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 4,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.5214,
+      "away_yellow": 5,
+      "home": "HNK Gorica",
+      "home_fatigue": 0.1722,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 3,
+      "home_unavailable": 0,
+      "home_xg": 0.7979,
+      "home_yellow": 0,
+      "round": 26,
+      "scorers": [
+        {
+          "minute": 16,
+          "player": "Joško Gvardiol (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 23,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 41,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 51,
+          "player": "HNK Gorica — ostali",
+          "side": "home",
+          "team": "HNK Gorica"
+        },
+        {
+          "minute": 53,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 61,
+          "player": "HNK Gorica — CF",
+          "side": "home",
+          "team": "HNK Gorica"
+        }
+      ]
+    },
+    {
+      "away": "NK Rudeš",
+      "away_fatigue": 0.1722,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 3,
+      "away_unavailable": 0,
+      "away_xg": 0.6223,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.2196,
+      "home_yellow": 1,
+      "round": 27,
+      "scorers": [
+        {
+          "minute": 21,
+          "player": "NK Rudeš — CF",
+          "side": "away",
+          "team": "NK Rudeš"
+        },
+        {
+          "minute": 45,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 51,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 3,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.3435,
+      "away_yellow": 1,
+      "home": "HNK Hajduk",
+      "home_fatigue": 0.2089,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 0.8792,
+      "home_yellow": 3,
+      "round": 28,
+      "scorers": [
+        {
+          "minute": 2,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 58,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 75,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Rijeka",
+      "away_fatigue": 0.2089,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 0.712,
+      "away_yellow": 4,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 5,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.8492,
+      "home_yellow": 1,
+      "round": 29,
+      "scorers": [
+        {
+          "minute": 2,
+          "player": "HNK Rijeka — CF",
+          "side": "away",
+          "team": "HNK Rijeka"
+        },
+        {
+          "minute": 31,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 44,
+          "player": "Danijel Pranjić (Osijek 2003/04)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 68,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 79,
+          "player": "Joško Gvardiol (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 83,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4622,
+      "away_yellow": 3,
+      "home": "NK Varaždin",
+      "home_fatigue": 0.1969,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 1,
+      "home_xg": 0.8095,
+      "home_yellow": 4,
+      "round": 30,
+      "scorers": [
+        {
+          "minute": 22,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Istra 1961",
+      "away_fatigue": 0.2089,
+      "away_goals": 0,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 3,
+      "away_substitutions": 5,
+      "away_unavailable": 0,
+      "away_xg": 0.6731,
+      "away_yellow": 7,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 4,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.9653,
+      "home_yellow": 0,
+      "round": 31,
+      "scorers": [
+        {
+          "minute": 29,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 43,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 53,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 56,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.5057,
+      "away_yellow": 4,
+      "home": "NK Slaven Belupo",
+      "home_fatigue": 0.2019,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 0.8083,
+      "home_yellow": 1,
+      "round": 32,
+      "scorers": [
+        {
+          "minute": 18,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "NK Osijek",
+      "away_fatigue": 0.2089,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 0.6623,
+      "away_yellow": 4,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.0175,
+      "home_yellow": 1,
+      "round": 33,
+      "scorers": [
+        {
+          "minute": 37,
+          "player": "NK Osijek — LW",
+          "side": "away",
+          "team": "NK Osijek"
+        },
+        {
+          "minute": 77,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 87,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 3,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.5343,
+      "away_yellow": 4,
+      "home": "NK Lokomotiva",
+      "home_fatigue": 0.2089,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 0.8124,
+      "home_yellow": 4,
+      "round": 34,
+      "scorers": [
+        {
+          "minute": 7,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 66,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 90,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Gorica",
+      "away_fatigue": 0.2089,
+      "away_goals": 1,
+      "away_red": 0,
+      "away_red_minute": null,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 0.836,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 2,
+      "home_red": 1,
+      "home_red_minute": 27,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 2.2432,
+      "home_yellow": 2,
+      "round": 35,
+      "scorers": [
+        {
+          "minute": 6,
+          "player": "HNK Gorica — LW",
+          "side": "away",
+          "team": "HNK Gorica"
+        },
+        {
+          "minute": 17,
+          "player": "Marko Pjaca (Dinamo 2015/16)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 47,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 3,
+      "away_red": 1,
+      "away_red_minute": 71,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 2.4073,
+      "away_yellow": 3,
+      "home": "NK Rudeš",
+      "home_fatigue": 0.2089,
+      "home_goals": 0,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 0.8147,
+      "home_yellow": 4,
+      "round": 36,
+      "scorers": [
+        {
+          "minute": 9,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 49,
+          "player": "Darijo Srna (Hajduk 2002/03)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 49,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "HNK Hajduk",
+      "away_fatigue": 0.2182,
+      "away_goals": 0,
+      "away_red": 1,
+      "away_red_minute": 20,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 0.5086,
+      "away_yellow": 2,
+      "home": "Korisnikov XI",
+      "home_fatigue": 0.231,
+      "home_goals": 3,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 2,
+      "home_substitutions": 4,
+      "home_unavailable": 0,
+      "home_xg": 3.7472,
+      "home_yellow": 2,
+      "round": 37,
+      "scorers": [
+        {
+          "minute": 3,
+          "player": "Luka Modrić (Dinamo 2007/08)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 59,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 88,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "home",
+          "team": "Korisnikov XI"
+        }
+      ]
+    },
+    {
+      "away": "Korisnikov XI",
+      "away_fatigue": 0.231,
+      "away_goals": 4,
+      "away_red": 1,
+      "away_red_minute": 36,
+      "away_substitution_windows": 2,
+      "away_substitutions": 4,
+      "away_unavailable": 0,
+      "away_xg": 1.7871,
+      "away_yellow": 1,
+      "home": "HNK Rijeka",
+      "home_fatigue": 0.2182,
+      "home_goals": 2,
+      "home_red": 0,
+      "home_red_minute": null,
+      "home_substitution_windows": 3,
+      "home_substitutions": 5,
+      "home_unavailable": 0,
+      "home_xg": 1.069,
+      "home_yellow": 1,
+      "round": 38,
+      "scorers": [
+        {
+          "minute": 7,
+          "player": "Dani Olmo (Dinamo 2018/19)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 7,
+          "player": "Mario Mandžukić (Dinamo 2008/09)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 9,
+          "player": "Marcelo Brozović (Dinamo 2013/14)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 28,
+          "player": "Mislav Oršić (Dinamo 2020/21)",
+          "side": "away",
+          "team": "Korisnikov XI"
+        },
+        {
+          "minute": 67,
+          "player": "HNK Rijeka — LW",
+          "side": "home",
+          "team": "HNK Rijeka"
+        },
+        {
+          "minute": 74,
+          "player": "HNK Rijeka — CF",
+          "side": "home",
+          "team": "HNK Rijeka"
+        }
+      ]
+    }
+  ],
+  "seed": 474,
+  "showcase_boost": 41.0
+}
