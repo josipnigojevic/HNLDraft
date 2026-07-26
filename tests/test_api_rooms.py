@@ -82,6 +82,38 @@ def test_catalog() -> api_rooms.Catalog:
     )
 
 
+class CatalogPositionIntegrityTests(unittest.TestCase):
+    def test_goalkeeper_cannot_receive_outfield_eligibility(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot combine goalkeeper and outfield positions",
+        ):
+            api_rooms.Catalog._normalize_player(
+                {
+                    "name": "Broken fallback",
+                    "positions": ["GK", "CB", "ST"],
+                    "seasonRating": 70,
+                },
+                "club-season",
+                "club",
+                "2001/02",
+            )
+
+    def test_unknown_position_is_never_draft_eligible(self) -> None:
+        player = api_rooms.Catalog._normalize_player(
+            {
+                "name": "Unresolved player",
+                "positions": ["UNK"],
+                "seasonRating": 70,
+                "draftEligible": True,
+            },
+            "club-season",
+            "club",
+            "2001/02",
+        )
+        self.assertFalse(player["draftEligible"])
+
+
 class FakeClock:
     def __init__(self, value: float = 1_000.0) -> None:
         self.value = value
@@ -126,13 +158,18 @@ class SeasonPayloadTests(unittest.TestCase):
         first = api_rooms.RoomStore._season_result(38_000_474, 1, picks)
         second = api_rooms.RoomStore._season_result(38_000_474, 1, picks)
         self.assertEqual(first, second)
-        self.assertEqual(first["model"], "editorial-rating-poisson-v2")
+        self.assertEqual(first["model"], "editorial-rating-poisson-v3")
         self.assertEqual(first["played"], 36)
         self.assertEqual(len(first["matches"]), 36)
         self.assertEqual(
             [match["matchweek"] for match in first["matches"]],
             list(range(1, 37)),
         )
+        for match in first["matches"]:
+            animation = match["animation"]
+            self.assertEqual(animation["recommendedDurationMs"], 1_400)
+            self.assertEqual(animation["extraDurationMs"], 0)
+            self.assertNotIn("timeline", match)
 
         wins = sum(match["outcome"] == "W" for match in first["matches"])
         draws = sum(match["outcome"] == "D" for match in first["matches"])
@@ -256,13 +293,14 @@ class SeasonPayloadTests(unittest.TestCase):
         self.assertIn("biggestWin", first["records"])
         self.assertIn("highestScoringMatch", first["records"])
 
-    def test_seed_or_seat_changes_the_season(self) -> None:
+    def test_seed_changes_season_but_viewer_seat_does_not(self) -> None:
         picks = completed_xi_picks()
         baseline = api_rooms.RoomStore._season_result(2026, 1, picks)
         different_seed = api_rooms.RoomStore._season_result(2027, 1, picks)
         different_seat = api_rooms.RoomStore._season_result(2026, 2, picks)
         self.assertNotEqual(baseline["matches"], different_seed["matches"])
-        self.assertNotEqual(baseline["matches"], different_seat["matches"])
+        self.assertEqual(baseline["matches"], different_seat["matches"])
+        self.assertNotEqual(baseline["seed"], different_seat["seed"])
 
 
 class RoomStoreTests(unittest.TestCase):
@@ -462,6 +500,188 @@ class RoomStoreTests(unittest.TestCase):
         host = next(item for item in ana_view["participants"] if item["isHost"])
         self.assertTrue(host["currentSpin"]["squadHidden"])
         self.assertIsNone(host["currentSpin"]["players"])
+
+    def test_live_room_uses_shared_mirrored_manager_fixtures(self) -> None:
+        created = self.create(
+            mode="live",
+            target_picks=1,
+            max_players=2,
+            seed=20_260_726,
+        )
+        joined = self.store.join_room(
+            created["roomCode"],
+            {"name": "Ana"},
+        )
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            joined["room"]["version"],
+        )
+        room = self.store.spin(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+        )
+        host_player, host_slot = self.first_available(room)
+        room = self.store.pick(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+            host_player["id"],
+            host_slot,
+        )
+        room = self.store.spin(
+            created["roomCode"],
+            joined["participantToken"],
+            room["version"],
+            0,
+        )
+        guest_player, guest_slot = self.first_available(room)
+        room = self.store.pick(
+            created["roomCode"],
+            joined["participantToken"],
+            room["version"],
+            0,
+            guest_player["id"],
+            guest_slot,
+        )
+        self.assertEqual(room["status"], "complete")
+        host = next(
+            participant
+            for participant in room["participants"]
+            if participant["id"] == created["participantId"]
+        )
+        guest = next(
+            participant
+            for participant in room["participants"]
+            if participant["id"] == joined["participantId"]
+        )
+        self.assertEqual(len(host["result"]["matches"]), 36)
+        self.assertEqual(len(guest["result"]["matches"]), 36)
+        self.assertEqual(host["result"]["seasonMode"], "shared-live")
+        self.assertEqual(
+            host["result"]["seasonId"],
+            guest["result"]["seasonId"],
+        )
+        self.assertEqual(
+            host["result"]["managerParticipantId"],
+            created["participantId"],
+        )
+        self.assertEqual(
+            guest["result"]["managerParticipantId"],
+            joined["participantId"],
+        )
+        host_h2h = {
+            match["fixtureId"]: match
+            for match in host["result"]["matches"]
+            if match["isManagerVsManager"]
+        }
+        guest_h2h = {
+            match["fixtureId"]: match
+            for match in guest["result"]["matches"]
+            if match["isManagerVsManager"]
+        }
+        self.assertEqual(set(host_h2h), set(guest_h2h))
+        self.assertEqual(len(host_h2h), 4)
+        for fixture_id in host_h2h:
+            host_match = host_h2h[fixture_id]
+            guest_match = guest_h2h[fixture_id]
+            self.assertEqual(host_match["matchType"], "manager-head-to-head")
+            self.assertTrue(host_match["opponent"]["isHuman"])
+            self.assertTrue(guest_match["opponent"]["isHuman"])
+            self.assertEqual(
+                host_match["opponent"]["participantId"],
+                joined["participantId"],
+            )
+            self.assertEqual(
+                guest_match["opponent"]["participantId"],
+                created["participantId"],
+            )
+            self.assertNotEqual(host_match["venue"], guest_match["venue"])
+            self.assertEqual(
+                host_match["goalsFor"],
+                guest_match["goalsAgainst"],
+            )
+            self.assertEqual(
+                host_match["goalsAgainst"],
+                guest_match["goalsFor"],
+            )
+            self.assertEqual(
+                host_match["scorers"],
+                guest_match["opponentScorers"],
+            )
+            self.assertEqual(
+                host_match["opponentScorers"],
+                guest_match["scorers"],
+            )
+            self.assertEqual(
+                host_match["timeline"][-1]["goalsFor"],
+                host_match["goalsFor"],
+            )
+            self.assertEqual(
+                guest_match["timeline"][-1]["goalsFor"],
+                guest_match["goalsFor"],
+            )
+            animation = host_match["animation"]
+            self.assertEqual(animation["recommendedDurationMs"], 4_400)
+            self.assertEqual(animation["extraDurationMs"], 3_000)
+            self.assertEqual(animation["fullTimeHoldMs"], 400)
+            self.assertEqual(animation["startLabel"], "0′")
+            self.assertEqual(animation["endLabel"], "FT")
+            timeline = host_match["timeline"]
+            self.assertEqual(len(timeline), 92)
+            self.assertEqual(timeline[0]["minute"], 0)
+            self.assertEqual(timeline[0]["atMs"], 0)
+            self.assertEqual(timeline[-1]["minuteLabel"], "FT")
+            self.assertEqual(
+                timeline[-1]["atMs"],
+                animation["recommendedDurationMs"],
+            )
+            self.assertEqual(
+                animation["goalEventCount"],
+                host_match["goalsFor"] + host_match["goalsAgainst"],
+            )
+            self.assertEqual(
+                sum(len(frame["events"]) for frame in timeline),
+                host_match["goalsFor"] + host_match["goalsAgainst"],
+            )
+
+        table_fields = (
+            "played",
+            "wins",
+            "draws",
+            "losses",
+            "points",
+            "goalsFor",
+            "goalsAgainst",
+            "goalDifference",
+            "position",
+        )
+        host_table = {
+            row["teamId"]: tuple(row[field] for field in table_fields)
+            for row in host["result"]["leagueTable"]
+        }
+        guest_table = {
+            row["teamId"]: tuple(row[field] for field in table_fields)
+            for row in guest["result"]["leagueTable"]
+        }
+        self.assertEqual(host_table, guest_table)
+        self.assertEqual(
+            sum(row["isHuman"] for row in host["result"]["leagueTable"]),
+            2,
+        )
+        fetched = self.store.get_room(
+            created["roomCode"],
+            created["participantToken"],
+        )
+        fetched_host = next(
+            participant
+            for participant in fetched["participants"]
+            if participant["id"] == created["participantId"]
+        )
+        self.assertEqual(fetched_host["result"], host["result"])
 
     def test_reposition_into_compatible_open_slot(self) -> None:
         created = self.create(target_picks=2)

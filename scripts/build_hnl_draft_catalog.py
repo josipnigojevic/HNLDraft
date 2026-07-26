@@ -44,6 +44,34 @@ HNS_CURRENT_COMPETITION_URL = (
     "https://semafor.hns.family/en/competitions/100391485/supersport-hnl/"
 )
 HNS_RIZNICA_URL = "https://riznica.hns.family/klubovi/"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_POSITION_OVERRIDES = (
+    REPOSITORY_ROOT / "data" / "historical_position_overrides.json"
+)
+DEFAULT_SUPPLEMENTAL_CLUB_SEASONS = (
+    REPOSITORY_ROOT / "data" / "supplemental_club_seasons.json"
+)
+
+EXACT_POSITION_CODES = {
+    "GK",
+    "RB",
+    "RWB",
+    "CB",
+    "LB",
+    "LWB",
+    "DM",
+    "CM",
+    "AM",
+    "RM",
+    "LM",
+    "RW",
+    "LW",
+    "ST",
+    "SS",
+    "CF",
+}
+POSITION_GROUP_CODES = {"DEF", "MID", "FWD"}
+VALID_POSITION_CODES = EXACT_POSITION_CODES | POSITION_GROUP_CODES | {"UNK"}
 
 CLUB_ACCENTS = {
     "dinamo": "#1769ff",
@@ -81,6 +109,24 @@ def parse_args() -> argparse.Namespace:
             "Optional directory of official HNS pages named "
             "hns_riznica_YYYY-YY.html. Champion squads are added for seasons "
             "before the secondary performance dataset begins."
+        ),
+    )
+    parser.add_argument(
+        "--position-overrides",
+        type=Path,
+        default=DEFAULT_POSITION_OVERRIDES,
+        help=(
+            "Source-cited historical position overrides. Broad source roles "
+            "(DEF/MID/FWD) remain broad rather than inventing exact positions."
+        ),
+    )
+    parser.add_argument(
+        "--supplemental-club-seasons",
+        type=Path,
+        default=DEFAULT_SUPPLEMENTAL_CLUB_SEASONS,
+        help=(
+            "Source-cited club-season rosters that are absent from the "
+            "performance input."
         ),
     )
     parser.add_argument("--output", required=True, type=Path)
@@ -125,8 +171,19 @@ def as_float(value: Any) -> float:
         return 0.0
 
 
+def optional_int(value: Any, *, context: str) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{context}: expected an integer or null") from error
+
+
 def season_start_year(label: str) -> int:
     first = int(label.split("/", 1)[0])
+    if first >= 1900:
+        return first
     return 1900 + first if first >= 90 else 2000 + first
 
 
@@ -137,6 +194,32 @@ def long_season(label: str) -> str:
 
 def clean_player_name(name: str, player_id: str) -> str:
     return re.sub(rf"\s+\({re.escape(player_id)}\)$", "", name).strip()
+
+
+def resolve_performance_player_name(
+    profile: dict[str, str],
+    player_id: str,
+    market_row: dict[str, str] | None = None,
+) -> str | None:
+    """Return a source-backed display name without manufacturing one."""
+    profile_name = clean_player_name(profile.get("player_name", ""), player_id)
+    if profile_name:
+        return profile_name
+
+    first_name = str(profile.get("first_name", "")).strip()
+    last_name = str(profile.get("last_name", "")).strip()
+    if first_name and last_name:
+        return f"{first_name} {last_name}"
+
+    if market_row:
+        for field in ("full_name", "name"):
+            market_name = clean_player_name(
+                str(market_row.get(field, "")),
+                player_id,
+            )
+            if market_name:
+                return market_name
+    return None
 
 
 def normalized_name(name: str) -> str:
@@ -154,37 +237,249 @@ def _slug(value: str) -> str:
 def role_for(position: str, main_position: str) -> tuple[str, list[str]]:
     raw = position.lower()
     main = main_position.lower()
-    if "goalkeeper" in raw or main == "goalkeeper":
+    detail = f"{raw} {main}"
+    if "goalkeeper" in detail:
         return "GK", ["GK"]
-    if "centre-back" in raw or "center-back" in raw:
+    if "left wing-back" in detail or "left wingback" in detail:
+        return "DEF", ["LWB"]
+    if "right wing-back" in detail or "right wingback" in detail:
+        return "DEF", ["RWB"]
+    if "centre-back" in detail or "center-back" in detail:
         return "DEF", ["CB"]
-    if "left-back" in raw:
-        return "DEF", ["LB", "LWB"]
-    if "right-back" in raw:
-        return "DEF", ["RB", "RWB"]
-    if "defender" in raw or main == "defender":
-        return "DEF", ["CB"]
-    if "defensive midfield" in raw:
-        return "MID", ["DM", "CM"]
-    if "attacking midfield" in raw:
-        return "MID", ["AM", "CM"]
-    if "left midfield" in raw:
-        return "MID", ["LM", "LW", "CM"]
-    if "right midfield" in raw:
-        return "MID", ["RM", "RW", "CM"]
-    if "central midfield" in raw or "midfield" in raw or main == "midfield":
-        return "MID", ["CM", "DM", "AM"]
-    if "left winger" in raw:
-        return "FWD", ["LW", "RW", "ST"]
-    if "right winger" in raw:
-        return "FWD", ["RW", "LW", "ST"]
-    if "second striker" in raw:
-        return "FWD", ["ST", "AM"]
-    if "centre-forward" in raw or "center-forward" in raw:
+    if "left-back" in detail or "left back" in detail:
+        return "DEF", ["LB"]
+    if "right-back" in detail or "right back" in detail:
+        return "DEF", ["RB"]
+    if "defensive midfield" in detail or "defensive midfielder" in detail:
+        return "MID", ["DM"]
+    if "attacking midfield" in detail or "attacking midfielder" in detail:
+        return "MID", ["AM"]
+    if "central midfield" in detail or "central midfielder" in detail:
+        return "MID", ["CM"]
+    if "left midfield" in detail or "left midfielder" in detail:
+        return "MID", ["LM"]
+    if "right midfield" in detail or "right midfielder" in detail:
+        return "MID", ["RM"]
+    if "left winger" in detail:
+        return "FWD", ["LW"]
+    if "right winger" in detail:
+        return "FWD", ["RW"]
+    if "second striker" in detail:
+        return "FWD", ["SS"]
+    if "centre-forward" in detail or "center-forward" in detail:
+        return "FWD", ["CF"]
+    if re.search(r"\bstriker\b", detail):
         return "FWD", ["ST"]
-    if "attack" in raw or main == "attack":
-        return "FWD", ["ST", "LW", "RW"]
-    return "MID", ["CM"]
+    if "defender" in detail or "defence" in detail or "defense" in detail:
+        return "DEF", ["DEF"]
+    if "midfield" in detail:
+        return "MID", ["MID"]
+    if "forward" in detail or "attack" in detail or "winger" in detail:
+        return "FWD", ["FWD"]
+    return "UNVERIFIED", ["UNK"]
+
+
+def validate_position_assignment(
+    position_group: str,
+    positions: Iterable[str],
+    *,
+    context: str,
+) -> list[str]:
+    normalized = list(dict.fromkeys(str(position).upper() for position in positions))
+    if not normalized:
+        raise ValueError(f"{context}: positions must not be empty")
+    invalid = set(normalized) - VALID_POSITION_CODES
+    if invalid:
+        raise ValueError(
+            f"{context}: unsupported position code(s): {', '.join(sorted(invalid))}"
+        )
+    if "GK" in normalized and normalized != ["GK"]:
+        raise ValueError(f"{context}: GK cannot be combined with an outfield role")
+    if "UNK" in normalized and normalized != ["UNK"]:
+        raise ValueError(f"{context}: UNK cannot be combined with another role")
+    if position_group == "GK" and normalized != ["GK"]:
+        raise ValueError(f"{context}: GK group must contain only GK")
+    if position_group == "UNVERIFIED" and normalized != ["UNK"]:
+        raise ValueError(f"{context}: unresolved roles must contain only UNK")
+    if position_group not in {"GK", "DEF", "MID", "FWD", "UNVERIFIED"}:
+        raise ValueError(f"{context}: unsupported position group {position_group!r}")
+    if position_group != "GK" and "GK" in normalized:
+        raise ValueError(f"{context}: outfield group cannot contain GK")
+    return normalized
+
+
+def load_position_overrides(path: Path | None) -> dict[str, dict[str, Any]]:
+    if path is None or not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    overrides: dict[str, dict[str, Any]] = {}
+    for row in payload.get("players", []):
+        name = str(row.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"{path}: position override is missing a player name")
+        key = normalized_name(name)
+        if key in overrides:
+            raise ValueError(f"{path}: duplicate position override for {name}")
+        group = str(row.get("positionGroup", "")).upper()
+        positions = validate_position_assignment(
+            group,
+            row.get("positions", []),
+            context=f"{path}:{name}",
+        )
+        source = row.get("source")
+        if not isinstance(source, dict) or not source.get("url"):
+            raise ValueError(f"{path}:{name}: a cited position source is required")
+        overrides[key] = {
+            **row,
+            "name": name,
+            "positionGroup": group,
+            "positions": positions,
+        }
+    return overrides
+
+
+def profiles_indexed_by_name(
+    profiles: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    result: dict[str, dict[str, str]] = {}
+    for profile in profiles.values():
+        player_id = profile["player_id"]
+        name = resolve_performance_player_name(profile, player_id)
+        if not name:
+            continue
+        result.setdefault(normalized_name(name), profile)
+    return result
+
+
+def resolve_historical_position(
+    name: str,
+    profiles_by_name: dict[str, dict[str, str]],
+    market_rows_by_name: dict[str, dict[str, str]],
+    position_overrides: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    name_key = normalized_name(name)
+    profile = profiles_by_name.get(name_key)
+    market_row = market_rows_by_name.get(name_key)
+    override = position_overrides.get(name_key)
+    if profile:
+        group, positions = role_for(
+            profile.get("position", ""), profile.get("main_position", "")
+        )
+        positions = validate_position_assignment(
+            group,
+            positions,
+            context=f"profile:{name}",
+        )
+        return {
+            "positionGroup": group,
+            "positions": positions,
+            "sourcePlayerId": str(profile["player_id"]),
+            "nationality": profile.get("citizenship") or "Unknown",
+            "highestMarketValue": (
+                as_int(market_row.get("highest_market_value_in_eur"))
+                if market_row
+                else 0
+            ),
+            "positionConfidence": 0.72,
+            "positionSource": {
+                "name": "Transfermarkt-derived player profile",
+                "url": SOURCE_DATASET_URL,
+            },
+            "draftEligible": group != "UNVERIFIED",
+            "positionDisclosure": "Profile-backed position.",
+        }
+    if market_row:
+        group, positions = role_for(
+            market_row.get("sub_position", ""),
+            market_row.get("position", ""),
+        )
+        positions = validate_position_assignment(
+            group,
+            positions,
+            context=f"player-index:{name}",
+        )
+        return {
+            "positionGroup": group,
+            "positions": positions,
+            "sourcePlayerId": str(market_row["player_id"]),
+            "nationality": market_row.get("country_of_citizenship") or "Unknown",
+            "highestMarketValue": as_int(
+                market_row.get("highest_market_value_in_eur")
+            ),
+            "positionConfidence": 0.7,
+            "positionSource": {
+                "name": "Transfermarkt-derived player index",
+                "url": market_row.get("url") or SOURCE_DATASET_URL,
+            },
+            "draftEligible": group != "UNVERIFIED",
+            "positionDisclosure": "Player-index-backed position.",
+        }
+    if override:
+        group = override["positionGroup"]
+        positions = validate_position_assignment(
+            group,
+            override["positions"],
+            context=f"position-override:{name}",
+        )
+        role_scope = (
+            "broad position group"
+            if positions in (["DEF"], ["MID"], ["FWD"])
+            else "exact position"
+        )
+        return {
+            "positionGroup": group,
+            "positions": positions,
+            "sourcePlayerId": str(
+                override.get("sourcePlayerId") or f"source-{_slug(name)}"
+            ),
+            "nationality": override.get("nationality") or "Unknown",
+            "highestMarketValue": 0,
+            "positionConfidence": as_float(override.get("confidence")) or 0.8,
+            "positionSource": override["source"],
+            "draftEligible": True,
+            "positionDisclosure": (
+                f"Curated, cited {role_scope}; no other role is implied."
+            ),
+        }
+    return {
+        "positionGroup": "UNVERIFIED",
+        "positions": ["UNK"],
+        "sourcePlayerId": f"hns-{_slug(name)}",
+        "nationality": "Unknown",
+        "highestMarketValue": 0,
+        "positionConfidence": 0.2,
+        "positionSource": None,
+        "draftEligible": False,
+        "positionDisclosure": (
+            "Position is absent from the available source cache. The player is "
+            "retained as a roster fact but is not draft-selectable."
+        ),
+    }
+
+
+def assert_catalog_position_integrity(
+    club_seasons: Iterable[dict[str, Any]],
+) -> None:
+    for club_season in club_seasons:
+        for player in club_season["players"]:
+            if not str(player.get("name", "")).strip():
+                raise ValueError(
+                    f"{club_season['club']} {club_season['season']}: "
+                    "player name must not be empty"
+                )
+            positions = validate_position_assignment(
+                player["positionGroup"],
+                player["positions"],
+                context=(
+                    f"{club_season['club']} {club_season['season']} "
+                    f"{player['name']}"
+                ),
+            )
+            if player.get("draftEligible", True) and positions == ["UNK"]:
+                raise ValueError(
+                    f"{club_season['club']} {club_season['season']} "
+                    f"{player['name']}: UNK player cannot be draft-eligible"
+                )
 
 
 def club_accent(name: str) -> str:
@@ -243,16 +538,25 @@ def load_profiles(path: Path) -> dict[str, dict[str, str]]:
 
 def load_market_values(
     path: Path | None,
-) -> tuple[dict[str, int], dict[str, dict[str, str]]]:
+) -> tuple[
+    dict[str, int],
+    dict[str, dict[str, str]],
+    dict[str, dict[str, str]],
+]:
     if path is None or not path.exists():
-        return {}, {}
+        return {}, {}, {}
     values: dict[str, int] = {}
-    rows: dict[str, dict[str, str]] = {}
+    rows_by_name: dict[str, dict[str, str]] = {}
+    rows_by_player_id: dict[str, dict[str, str]] = {}
     with open_text(path) as handle:
         for row in csv.DictReader(handle):
-            values[row["player_id"]] = as_int(row.get("highest_market_value_in_eur"))
-            rows[normalized_name(row.get("name", ""))] = row
-    return values, rows
+            player_id = row["player_id"]
+            values[player_id] = as_int(row.get("highest_market_value_in_eur"))
+            rows_by_player_id[player_id] = row
+            indexed_name = str(row.get("full_name") or row.get("name") or "")
+            if indexed_name.strip():
+                rows_by_name[normalized_name(indexed_name)] = row
+    return values, rows_by_name, rows_by_player_id
 
 
 def iter_hnl_performances(path: Path) -> Iterable[dict[str, str]]:
@@ -274,14 +578,11 @@ def load_hns_champion_squads(
     directory: Path | None,
     profiles: dict[str, dict[str, str]],
     market_rows_by_name: dict[str, dict[str, str]],
+    position_overrides: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     if directory is None or not directory.is_dir():
         return []
-    profiles_by_name: dict[str, dict[str, str]] = {}
-    for profile in profiles.values():
-        player_id = profile["player_id"]
-        name = clean_player_name(profile.get("player_name", ""), player_id)
-        profiles_by_name.setdefault(normalized_name(name), profile)
+    profiles_by_name = profiles_indexed_by_name(profiles)
     records: list[dict[str, Any]] = []
     club_ids = {
         "croatia zagreb": "419",
@@ -323,51 +624,21 @@ def load_hns_champion_squads(
             name = player_match.group(1).strip()
             appearances = int(player_match.group(2))
             goals = int(player_match.group(3) or 0)
-            name_key = normalized_name(name)
-            profile = profiles_by_name.get(name_key)
-            market_row = market_rows_by_name.get(name_key)
-            if profile:
-                group, positions = role_for(
-                    profile.get("position", ""), profile.get("main_position", "")
-                )
-                source_player_id = profile["player_id"]
-                nationality = profile.get("citizenship") or "Unknown"
-                position_confidence = 0.72
-            elif market_row:
-                group, positions = role_for(
-                    market_row.get("sub_position", ""),
-                    market_row.get("position", ""),
-                )
-                source_player_id = market_row["player_id"]
-                nationality = market_row.get("country_of_citizenship") or "Unknown"
-                position_confidence = 0.7
-            else:
-                # The official archive establishes membership and totals but
-                # does not publish positions. Universal eligibility keeps the
-                # archived champion squad playable without pretending a role
-                # was verified.
-                group = "UNVERIFIED"
-                positions = [
-                    "GK",
-                    "RB",
-                    "CB",
-                    "LB",
-                    "DM",
-                    "CM",
-                    "AM",
-                    "RW",
-                    "LW",
-                    "ST",
-                ]
-                source_player_id = f"hns-{_slug(name)}"
-                nationality = "Unknown"
-                position_confidence = 0.2
-            highest_market_value = (
-                as_int(market_row.get("highest_market_value_in_eur"))
-                if market_row
-                else 0
+            resolved = resolve_historical_position(
+                name,
+                profiles_by_name,
+                market_rows_by_name,
+                position_overrides,
             )
+            group = resolved["positionGroup"]
+            positions = resolved["positions"]
+            source_player_id = resolved["sourcePlayerId"]
+            nationality = resolved["nationality"]
+            position_confidence = resolved["positionConfidence"]
+            highest_market_value = resolved["highestMarketValue"]
             effective_group = "FWD" if goals / max(1, appearances) >= 0.25 else group
+            if effective_group == "UNVERIFIED":
+                effective_group = "MID"
             rating = min(
                 91,
                 editorial_rating(
@@ -405,12 +676,9 @@ def load_hns_champion_squads(
                         f"{HNS_RIZNICA_URL}?sezona={season.replace('/', '%2F')}"
                     ),
                     "confidence": round(0.65 * position_confidence, 2),
-                    "positionDisclosure": (
-                        "Profile-backed position."
-                        if position_confidence >= 0.7
-                        else "Position unavailable in HNS archive; universal draft "
-                        "eligibility is a clearly marked game fallback."
-                    ),
+                    "draftEligible": resolved["draftEligible"],
+                    "positionSource": resolved["positionSource"],
+                    "positionDisclosure": resolved["positionDisclosure"],
                 }
             )
         if not players:
@@ -432,8 +700,9 @@ def load_hns_champion_squads(
                     "status": "official-champion-squad",
                     "note": (
                         "HNS Riznica supplies champion-squad membership, "
-                        "appearances and goals. Some player positions are "
-                        "unverified and explicitly use universal eligibility."
+                        "appearances and goals. Cited position sources supply "
+                        "exact or unit-level eligibility; unresolved players "
+                        "remain visible as UNK and are not draft-selectable."
                     ),
                 },
                 "source": {
@@ -453,17 +722,252 @@ def load_hns_champion_squads(
     return records
 
 
+def load_supplemental_club_seasons(
+    path: Path | None,
+    profiles: dict[str, dict[str, str]],
+    market_rows_by_name: dict[str, dict[str, str]],
+    position_overrides: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    profiles_by_name = profiles_indexed_by_name(profiles)
+    records: list[dict[str, Any]] = []
+    for source_record in payload.get("clubSeasons", []):
+        club = str(source_record.get("club", "")).strip()
+        season = str(source_record.get("season", "")).strip()
+        source = source_record.get("source")
+        if not club or not season:
+            raise ValueError(f"{path}: supplemental record needs club and season")
+        if not isinstance(source, dict) or not source.get("url"):
+            raise ValueError(f"{path}:{club} {season}: cited source is required")
+        start_year = season_start_year(season)
+        record_confidence = as_float(source_record.get("confidence")) or 0.72
+        players: list[dict[str, Any]] = []
+        for row in source_record.get("players", []):
+            name = str(row.get("name", "")).strip()
+            if not name:
+                raise ValueError(f"{path}:{club} {season}: player name is required")
+            row_group = str(row.get("positionGroup", "")).upper()
+            row_positions = row.get("positions")
+            if row_group or row_positions is not None:
+                if not row_group or row_positions is None:
+                    raise ValueError(
+                        f"{path}:{club} {season}:{name}: source-table position "
+                        "requires both positionGroup and positions"
+                    )
+                source_positions = validate_position_assignment(
+                    row_group,
+                    row_positions,
+                    context=f"{path}:{club} {season}:{name}",
+                )
+                resolved = {
+                    "positionGroup": row_group,
+                    "positions": source_positions,
+                    "sourcePlayerId": f"source-{_slug(name)}",
+                    "nationality": row.get("nationality") or "Unknown",
+                    "highestMarketValue": 0,
+                    "positionConfidence": record_confidence,
+                    "positionSource": {
+                        "name": source["name"],
+                        "url": source["url"],
+                    },
+                    "draftEligible": True,
+                    "positionDisclosure": (
+                        "Broad position is transcribed from the cited "
+                        "club-season squad table; no exact role is implied."
+                    ),
+                }
+            else:
+                resolved = resolve_historical_position(
+                    name,
+                    profiles_by_name,
+                    market_rows_by_name,
+                    position_overrides,
+                )
+            appearances = optional_int(
+                row.get("appearances"),
+                context=f"{path}:{club} {season}:{name}:appearances",
+            )
+            starts = optional_int(
+                row.get("starts"),
+                context=f"{path}:{club} {season}:{name}:starts",
+            )
+            substitute_appearances = optional_int(
+                row.get("substituteAppearances"),
+                context=(
+                    f"{path}:{club} {season}:{name}:substituteAppearances"
+                ),
+            )
+            if appearances is None and (
+                starts is not None and substitute_appearances is not None
+            ):
+                appearances = starts + substitute_appearances
+            if (
+                appearances is not None
+                and starts is not None
+                and substitute_appearances is not None
+                and appearances != starts + substitute_appearances
+            ):
+                raise ValueError(
+                    f"{path}:{club} {season}:{name}: appearances must equal "
+                    "starts plus substituteAppearances"
+                )
+            goals = optional_int(
+                row.get("goals"),
+                context=f"{path}:{club} {season}:{name}:goals",
+            )
+            rating_appearances = appearances or 0
+            rating_goals = goals or 0
+            group = resolved["positionGroup"]
+            rating_group = (
+                "FWD"
+                if appearances is not None
+                and rating_goals / max(1, rating_appearances) >= 0.25
+                else ("MID" if group == "UNVERIFIED" else group)
+            )
+            rating = min(
+                91,
+                editorial_rating(
+                    position_group=rating_group,
+                    appearances=rating_appearances,
+                    minutes=rating_appearances * 75,
+                    goals=rating_goals,
+                    assists=0,
+                    clean_sheets=0,
+                    goals_conceded=0,
+                    highest_market_value=resolved["highestMarketValue"],
+                )
+                + 4,
+            )
+            players.append(
+                {
+                    "id": (
+                        f"supplement-{_slug(club)}-{_slug(name)}-{start_year}"
+                    ),
+                    "sourcePlayerId": resolved["sourcePlayerId"],
+                    "name": name,
+                    "nationality": resolved["nationality"],
+                    "positionGroup": group,
+                    "positions": resolved["positions"],
+                    "seasonRating": rating,
+                    "primeRating": rating,
+                    "appearances": appearances,
+                    "starts": starts,
+                    "substituteAppearances": substitute_appearances,
+                    "minutes": None,
+                    "goals": goals,
+                    "assists": None,
+                    "yellowCards": None,
+                    "redCards": None,
+                    "marketValuePeakEur": (
+                        resolved["highestMarketValue"] or None
+                    ),
+                    "ratingKind": (
+                        "editorial-derived"
+                        if appearances is not None and goals is not None
+                        else "editorial-derived-partial-stats"
+                    ),
+                    "statsSource": source["url"],
+                    "confidence": round(
+                        record_confidence
+                        * resolved["positionConfidence"]
+                        * (
+                            1.0
+                            if appearances is not None and goals is not None
+                            else 0.8
+                        ),
+                        2,
+                    ),
+                    "draftEligible": resolved["draftEligible"],
+                    "positionSource": resolved["positionSource"],
+                    "positionDisclosure": resolved["positionDisclosure"],
+                    "statsDisclosure": (
+                        "League appearances and goals are source-backed."
+                        if appearances is not None and goals is not None
+                        else (
+                            "Null statistics are not reported by the cited "
+                            "season page and were not inferred."
+                        )
+                    ),
+                }
+            )
+        if not players:
+            raise ValueError(f"{path}:{club} {season}: player list is empty")
+        players.sort(
+            key=lambda player: (
+                -player["seasonRating"],
+                player["positionGroup"],
+                player["name"],
+            )
+        )
+        club_id = str(source_record.get("clubId") or f"supplement-{_slug(club)}")
+        draft_eligible = sum(
+            bool(player["draftEligible"]) for player in players
+        )
+        records.append(
+            {
+                "id": f"supplement-{club_id}-{start_year}",
+                "clubId": club_id,
+                "club": club,
+                "season": season,
+                "seasonStart": start_year,
+                "accent": club_accent(club),
+                "sourceBacked": True,
+                "confidence": round(record_confidence, 2),
+                "coverage": {
+                    "playerRows": len(players),
+                    "draftEligibleRows": draft_eligible,
+                    "status": "source-supplement",
+                    "note": source_record.get("note")
+                    or (
+                        "Named player-season rows are transcribed from the "
+                        "cited season source. Positions are resolved separately "
+                        "and unresolved players remain UNK/non-selectable."
+                    ),
+                },
+                "source": source,
+                "players": players,
+            }
+        )
+    return records
+
+
 def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
     profiles = load_profiles(args.profiles)
-    market_values, market_rows_by_name = load_market_values(args.player_index)
+    (
+        market_values,
+        market_rows_by_name,
+        market_rows_by_player_id,
+    ) = load_market_values(args.player_index)
+    position_overrides_path = getattr(
+        args,
+        "position_overrides",
+        DEFAULT_POSITION_OVERRIDES,
+    )
+    supplemental_path = getattr(
+        args,
+        "supplemental_club_seasons",
+        DEFAULT_SUPPLEMENTAL_CLUB_SEASONS,
+    )
+    position_overrides = load_position_overrides(position_overrides_path)
     grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     skipped_without_profile = 0
+    skipped_without_name = 0
 
     for row in iter_hnl_performances(args.performances):
         player_id = row["player_id"]
         profile = profiles.get(player_id)
         if not profile:
             skipped_without_profile += 1
+            continue
+        player_name = resolve_performance_player_name(
+            profile,
+            player_id,
+            market_rows_by_player_id.get(player_id),
+        )
+        if not player_name:
+            skipped_without_name += 1
             continue
         position_group, positions = role_for(
             profile.get("position", ""), profile.get("main_position", "")
@@ -493,7 +997,7 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         player = {
             "id": f"tm-{player_id}-{row['season_name'].replace('/', '-')}",
             "sourcePlayerId": player_id,
-            "name": clean_player_name(profile.get("player_name", ""), player_id),
+            "name": player_name,
             "nationality": profile.get("citizenship") or "Unknown",
             "positionGroup": position_group,
             "positions": positions,
@@ -509,6 +1013,12 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
             "marketValuePeakEur": highest_market_value or None,
             "ratingKind": "editorial-derived",
             "statsSource": SOURCE_DATASET_URL,
+            "draftEligible": position_group != "UNVERIFIED",
+            "positionSource": {
+                "name": "Transfermarkt-derived player profile",
+                "url": SOURCE_DATASET_URL,
+            },
+            "positionDisclosure": "Profile-backed position.",
         }
         key = (row["team_id"], row["team_name"], row["season_name"])
         grouped[key].append(player)
@@ -568,12 +1078,47 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         args.hns_riznica_dir,
         profiles,
         market_rows_by_name,
+        position_overrides,
     )
     club_seasons.extend(hns_legacy_records)
+    supplemental_records = load_supplemental_club_seasons(
+        supplemental_path,
+        profiles,
+        market_rows_by_name,
+        position_overrides,
+    )
+    existing_keys = {
+        (normalized_name(record["club"]), record["season"])
+        for record in club_seasons
+    }
+    for record in supplemental_records:
+        key = (normalized_name(record["club"]), record["season"])
+        if key in existing_keys:
+            raise ValueError(
+                "Supplement duplicates an existing club-season: "
+                f"{record['club']} {record['season']}"
+            )
+        existing_keys.add(key)
+        club_seasons.append(record)
+    supplemental_keys = {
+        (normalized_name(record["club"]), record["season"])
+        for record in supplemental_records
+    }
+    omitted = [
+        row
+        for row in omitted
+        if (normalized_name(row["club"]), row["season"]) not in supplemental_keys
+    ]
     club_seasons.sort(key=lambda item: (item["seasonStart"], item["club"]))
+    assert_catalog_position_integrity(club_seasons)
     seasons = sorted({item["season"] for item in club_seasons})
+    unresolved_position_players = sum(
+        player["positionGroup"] == "UNVERIFIED"
+        for record in club_seasons
+        for player in record["players"]
+    )
     return {
-        "schemaVersion": "1.0.0",
+        "schemaVersion": "1.1.0",
         "generatedAt": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "competition": {
             "id": COMPETITION_ID,
@@ -599,9 +1144,13 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
             "players": sum(len(item["players"]) for item in club_seasons),
             "omittedClubSeasons": len(omitted),
             "skippedRowsWithoutProfile": skipped_without_profile,
+            "skippedRowsWithoutUsableName": skipped_without_name,
             "completeHistoricalRosterArchive": False,
             "confidence": 0.68,
             "officialLegacyChampionSquads": len(hns_legacy_records),
+            "supplementalClubSeasons": len(supplemental_records),
+            "unresolvedPositionPlayers": unresolved_position_players,
+            "positionOverrides": len(position_overrides),
         },
         "sources": [
             {
@@ -636,6 +1185,19 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
                 "use": "Underlying descriptive competition and squad source.",
                 "priority": "secondary",
             },
+            {
+                "name": "Croatian Wikipedia season supplements",
+                "url": (
+                    "https://hr.wikipedia.org/wiki/"
+                    "Dodatak:HNK_Hajduk_Split_2001./02."
+                ),
+                "use": (
+                    "Named supplemental player-season appearances and goals "
+                    "where the main performance input has no club-season rows."
+                ),
+                "priority": "supplemental",
+                "license": "CC BY-SA",
+            },
         ],
         "ratingDisclosure": (
             "Season and prime ratings are original editorial game values derived "
@@ -648,6 +1210,16 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
             "playerIndexSha256": (
                 sha256(args.player_index)
                 if args.player_index and args.player_index.exists()
+                else None
+            ),
+            "positionOverridesSha256": (
+                sha256(position_overrides_path)
+                if position_overrides_path and position_overrides_path.exists()
+                else None
+            ),
+            "supplementalClubSeasonsSha256": (
+                sha256(supplemental_path)
+                if supplemental_path and supplemental_path.exists()
                 else None
             ),
         },

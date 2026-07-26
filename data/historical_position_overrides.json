@@ -1,0 +1,577 @@
+{
+  "schemaVersion": "1.0.0",
+  "method": "Manual, source-cited cache for historical players absent from the local profile datasets. A source that only establishes a broad unit is encoded as DEF, MID, or FWD; it does not imply an exact left/right/centre role.",
+  "players": [
+    {
+      "name": "Dražen Ladić",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.9,
+      "source": {
+        "name": "Wikidata — Dražen Ladić (P413)",
+        "url": "https://www.wikidata.org/wiki/Q471594"
+      }
+    },
+    {
+      "name": "Tomislav Butina",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.9,
+      "source": {
+        "name": "Wikidata — Tomislav Butina (P413)",
+        "url": "https://www.wikidata.org/wiki/Q468876"
+      }
+    },
+    {
+      "name": "Vladimir Vasilj",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.9,
+      "source": {
+        "name": "Wikidata — Vladimir Vasilj (P413)",
+        "url": "https://www.wikidata.org/wiki/Q983891"
+      }
+    },
+    {
+      "name": "Vladimir Balić",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Wikipedia — Vladimir Balić",
+        "url": "https://en.wikipedia.org/wiki/Vladimir_Bali%C4%87"
+      }
+    },
+    {
+      "name": "Hrvoje Sunara",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Wikipedia — Hrvoje Sunara",
+        "url": "https://en.wikipedia.org/wiki/Hrvoje_Sunara"
+      }
+    },
+    {
+      "name": "Zlatko Runje",
+      "positionGroup": "GK",
+      "positions": ["GK"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Wikipedia — Zlatko Runje",
+        "url": "https://en.wikipedia.org/wiki/Zlatko_Runje"
+      }
+    },
+    {
+      "name": "Damir Krznar",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Damir Krznar",
+        "url": "https://en.wikipedia.org/wiki/Damir_Krznar"
+      }
+    },
+    {
+      "name": "Stjepan Tomas",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Stjepan Tomas",
+        "url": "https://en.wikipedia.org/wiki/Stjepan_Tomas"
+      }
+    },
+    {
+      "name": "Mario Cvitanović",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Mario Cvitanović",
+        "url": "https://en.wikipedia.org/wiki/Mario_Cvitanovi%C4%87"
+      }
+    },
+    {
+      "name": "Mario Tokić",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Mario Tokić",
+        "url": "https://en.wikipedia.org/wiki/Mario_Toki%C4%87"
+      }
+    },
+    {
+      "name": "Goce Sedloski",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "North Macedonia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Goce Sedloski",
+        "url": "https://en.wikipedia.org/wiki/Goce_Sedloski"
+      }
+    },
+    {
+      "name": "Dino Drpić",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Dino Drpić",
+        "url": "https://en.wikipedia.org/wiki/Dino_Drpi%C4%87"
+      }
+    },
+    {
+      "name": "Goran Sablić",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Goran Sablić",
+        "url": "https://hr.wikipedia.org/wiki/Goran_Sabli%C4%87"
+      }
+    },
+    {
+      "name": "Hrvoje Vuković",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Hrvoje Vuković",
+        "url": "https://hr.wikipedia.org/wiki/Hrvoje_Vukovi%C4%87"
+      }
+    },
+    {
+      "name": "Darko Miladin",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Darko Miladin",
+        "url": "https://hr.wikipedia.org/wiki/Darko_Miladin"
+      }
+    },
+    {
+      "name": "Mato Neretljak",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Mato Neretljak",
+        "url": "https://en.wikipedia.org/wiki/Mato_Neretljak"
+      }
+    },
+    {
+      "name": "Damir Milinović",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Damir Milinović",
+        "url": "https://en.wikipedia.org/wiki/Damir_Milinovi%C4%87"
+      }
+    },
+    {
+      "name": "Vedran Ješe",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Vedran Ješe",
+        "url": "https://en.wikipedia.org/wiki/Vedran_Je%C5%A1e"
+      }
+    },
+    {
+      "name": "Hrvoje Vejić",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Hrvoje Vejić",
+        "url": "https://hr.wikipedia.org/wiki/Hrvoje_Veji%C4%87"
+      }
+    },
+    {
+      "name": "Vlatko Đolonga",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Vlatko Đolonga",
+        "url": "https://hr.wikipedia.org/wiki/Vlatko_%C4%90olonga"
+      }
+    },
+    {
+      "name": "Krunoslav Rendulić",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Krunoslav Rendulić",
+        "url": "https://en.wikipedia.org/wiki/Krunoslav_Renduli%C4%87"
+      }
+    },
+    {
+      "name": "Suad Filekovič",
+      "positionGroup": "DEF",
+      "positions": ["DEF"],
+      "nationality": "Slovenia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Suad Fileković",
+        "url": "https://en.wikipedia.org/wiki/Suad_Filekovi%C4%87"
+      }
+    },
+    {
+      "name": "Srđan Andrić",
+      "positionGroup": "MID",
+      "positions": ["MID"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Srđan Andrić",
+        "url": "https://hr.wikipedia.org/wiki/Sr%C4%91an_Andri%C4%87"
+      }
+    },
+    {
+      "name": "Hrvoje Štrok",
+      "positionGroup": "MID",
+      "positions": ["MID"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Hrvoje Štrok",
+        "url": "https://en.wikipedia.org/wiki/Hrvoje_%C5%A0trok"
+      }
+    },
+    {
+      "name": "Igor Musa",
+      "positionGroup": "MID",
+      "positions": ["MID"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Igor Musa",
+        "url": "https://hr.wikipedia.org/wiki/Igor_Musa"
+      }
+    },
+    {
+      "name": "Ante Miše",
+      "positionGroup": "MID",
+      "positions": ["MID"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Ante Miše",
+        "url": "https://en.wikipedia.org/wiki/Ante_Mi%C5%A1e"
+      }
+    },
+    {
+      "name": "Aljoša Asanović",
+      "positionGroup": "MID",
+      "positions": ["MID"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Aljoša Asanović",
+        "url": "https://hr.wikipedia.org/wiki/Aljo%C5%A1a_Asanovi%C4%87"
+      }
+    },
+    {
+      "name": "Igor Cvitanović",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Igor Cvitanović",
+        "url": "https://en.wikipedia.org/wiki/Igor_Cvitanovi%C4%87"
+      }
+    },
+    {
+      "name": "Mark Viduka",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Australia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Mark Viduka",
+        "url": "https://en.wikipedia.org/wiki/Mark_Viduka"
+      }
+    },
+    {
+      "name": "Miljenko Kovačić",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Miljenko Kovačić",
+        "url": "https://en.wikipedia.org/wiki/Miljenko_Kova%C4%8Di%C4%87"
+      }
+    },
+    {
+      "name": "Dario Zahora",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Dario Zahora",
+        "url": "https://en.wikipedia.org/wiki/Dario_Zahora"
+      }
+    },
+    {
+      "name": "Mate Bilić",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Mate Bilić",
+        "url": "https://hr.wikipedia.org/wiki/Mate_Bili%C4%87"
+      }
+    },
+    {
+      "name": "Ivan Bošnjak",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Ivan Bošnjak",
+        "url": "https://hr.wikipedia.org/wiki/Ivan_Bo%C5%A1njak"
+      }
+    },
+    {
+      "name": "Admir Hasančić",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Bosnia and Herzegovina",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Admir Hasančić",
+        "url": "https://en.wikipedia.org/wiki/Admir_Hasan%C4%8Di%C4%87"
+      }
+    },
+    {
+      "name": "Krunoslav Lovrek",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Krunoslav Lovrek",
+        "url": "https://en.wikipedia.org/wiki/Krunoslav_Lovrek"
+      }
+    },
+    {
+      "name": "Tomislav Erceg",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Tomislav Erceg",
+        "url": "https://hr.wikipedia.org/wiki/Tomislav_Erceg"
+      }
+    },
+    {
+      "name": "Nino Bule",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Croatia",
+      "confidence": 0.84,
+      "source": {
+        "name": "Croatian Wikipedia — Nino Bule",
+        "url": "https://hr.wikipedia.org/wiki/Nino_Bule"
+      }
+    },
+    {
+      "name": "Dmitrij Radčenko",
+      "positionGroup": "FWD",
+      "positions": ["FWD"],
+      "nationality": "Russia",
+      "confidence": 0.82,
+      "source": {
+        "name": "Wikipedia — Dmitri Radchenko",
+        "url": "https://en.wikipedia.org/wiki/Dmitri_Radchenko"
+      }
+    },
+    {"name": "Dragan Stojkić", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.82, "source": {"name": "English Wikipedia — Dragan Stojkić", "url": "https://en.wikipedia.org/wiki/Dragan_Stojki%C4%87"}},
+    {"name": "Mario Jozić", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Jozić", "url": "https://en.wikipedia.org/wiki/Mario_Jozi%C4%87"}},
+    {"name": "Miralem Ibrahimović", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.82, "source": {"name": "English Wikipedia — Miralem Ibrahimović", "url": "https://en.wikipedia.org/wiki/Miralem_Ibrahimovi%C4%87"}},
+    {"name": "Alen Petrović", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Alen Petrović", "url": "https://en.wikipedia.org/wiki/Alen_Petrovi%C4%87"}},
+    {"name": "Andrija Balajić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Andrija Balajić", "url": "https://en.wikipedia.org/wiki/Andrija_Balaji%C4%87"}},
+    {"name": "Ante Jažić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Ante Jažić", "url": "https://en.wikipedia.org/wiki/Ante_Jazi%C4%87"}},
+    {"name": "Anthony Grdić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Anthony Grdić", "url": "https://en.wikipedia.org/wiki/Anthony_Grdic"}},
+    {"name": "Dalibor Božac", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Dalibor Božac", "url": "https://en.wikipedia.org/wiki/Dalibor_Bo%C5%BEac"}},
+    {"name": "Danijel Krivić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Danijel Krivić", "url": "https://en.wikipedia.org/wiki/Danijel_Krivi%C4%87"}},
+    {"name": "Danijel Vušković", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Danijel Vušković", "url": "https://en.wikipedia.org/wiki/Danijel_Vu%C5%A1kovi%C4%87"}},
+    {"name": "Darko Butorović", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Darko Butorović", "url": "https://en.wikipedia.org/wiki/Darko_Butorovi%C4%87"}},
+    {"name": "Goran Jurić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Goran Jurić", "url": "https://en.wikipedia.org/wiki/Goran_Juri%C4%87"}},
+    {"name": "Goran Stavrevski", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Goran Stavrevski", "url": "https://en.wikipedia.org/wiki/Goran_Stavrevski"}},
+    {"name": "Jurica Puljiz", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Jurica Puljiz", "url": "https://en.wikipedia.org/wiki/Jurica_Puljiz"}},
+    {"name": "Kristijan Polovanec", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Kristijan Polovanec", "url": "https://en.wikipedia.org/wiki/Kristijan_Polovanec"}},
+    {"name": "Marinko Galič", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Marinko Galič", "url": "https://en.wikipedia.org/wiki/Marinko_Gali%C4%8D"}},
+    {"name": "Mario Osibov", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Osibov", "url": "https://en.wikipedia.org/wiki/Mario_Osibov"}},
+    {"name": "Spomenko Bošnjak", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Spomenko Bošnjak", "url": "https://en.wikipedia.org/wiki/Spomenko_Bo%C5%A1njak"}},
+    {"name": "Stipe Matić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Stipe Matić", "url": "https://en.wikipedia.org/wiki/Stipe_Mati%C4%87"}},
+    {"name": "Stjepan Skočibušić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Stjepan Skočibušić", "url": "https://en.wikipedia.org/wiki/Stjepan_Sko%C4%8Dibu%C5%A1i%C4%87"}},
+    {"name": "Vik Lalić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Vik Lalić", "url": "https://en.wikipedia.org/wiki/Vik_Lali%C4%87"}},
+    {"name": "Dean Računica", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Dean Računica", "url": "https://en.wikipedia.org/wiki/Dean_Ra%C4%8Dunica"}},
+    {"name": "Domagoj Kosić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Domagoj Kosić", "url": "https://en.wikipedia.org/wiki/Domagoj_Kosi%C4%87"}},
+    {"name": "Dževad Turković", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Dževad Turković", "url": "https://en.wikipedia.org/wiki/D%C5%BEevad_Turkovi%C4%87"}},
+    {"name": "Goran Talevski", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Goran Talevski", "url": "https://en.wikipedia.org/wiki/Goran_Talevski"}},
+    {"name": "Goran Vučević", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Goran Vučević", "url": "https://en.wikipedia.org/wiki/Goran_Vu%C4%8Devi%C4%87"}},
+    {"name": "Ibrahim Duro", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Ibrahim Duro", "url": "https://en.wikipedia.org/wiki/Ibrahim_Duro"}},
+    {"name": "Ivan Jerković", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Ivan Jerković", "url": "https://en.wikipedia.org/wiki/Ivan_Jerkovi%C4%87"}},
+    {"name": "Ivica Pirić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Ivica Pirić", "url": "https://en.wikipedia.org/wiki/Ivica_Piri%C4%87"}},
+    {"name": "Jasmin Agić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Jasmin Agić", "url": "https://en.wikipedia.org/wiki/Jasmin_Agi%C4%87"}},
+    {"name": "Jasmin Mujdža", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Jasmin Mujdža", "url": "https://en.wikipedia.org/wiki/Jasmin_Mujd%C5%BEa"}},
+    {"name": "Jerko Leko", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Jerko Leko", "url": "https://en.wikipedia.org/wiki/Jerko_Leko"}},
+    {"name": "Josip Gašpar", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Josip Gašpar", "url": "https://en.wikipedia.org/wiki/Josip_Ga%C5%A1par"}},
+    {"name": "Joško Jeličić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Joško Jeličić", "url": "https://en.wikipedia.org/wiki/Jo%C5%A1ko_Jeli%C4%8Di%C4%87"}},
+    {"name": "Krunoslav Jurčić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Krunoslav Jurčić", "url": "https://en.wikipedia.org/wiki/Krunoslav_Jur%C4%8Di%C4%87"}},
+    {"name": "Mario Bazina", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Bazina", "url": "https://en.wikipedia.org/wiki/Mario_Bazina"}},
+    {"name": "Mario Grgurović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Grgurović", "url": "https://en.wikipedia.org/wiki/Mario_Grgurovi%C4%87"}},
+    {"name": "Mario Jurić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Jurić", "url": "https://en.wikipedia.org/wiki/Mario_Juri%C4%87_(footballer)"}},
+    {"name": "Mario Čutura", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Čutura", "url": "https://en.wikipedia.org/wiki/Mario_%C4%8Cutura"}},
+    {"name": "Marko Mlinarić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Marko Mlinarić", "url": "https://en.wikipedia.org/wiki/Marko_Mlinari%C4%87"}},
+    {"name": "Mihael Mikić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mihael Mikić", "url": "https://en.wikipedia.org/wiki/Mihael_Miki%C4%87"}},
+    {"name": "Mirko Hrgović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mirko Hrgović", "url": "https://en.wikipedia.org/wiki/Mirko_Hrgovi%C4%87"}},
+    {"name": "Nenad Pralija", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Nenad Pralija", "url": "https://en.wikipedia.org/wiki/Nenad_Pralija"}},
+    {"name": "Nermin Šabić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Nermin Šabić", "url": "https://en.wikipedia.org/wiki/Nermin_%C5%A0abi%C4%87"}},
+    {"name": "Predrag Šimić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Predrag Šimić", "url": "https://en.wikipedia.org/wiki/Predrag_%C5%A0imi%C4%87"}},
+    {"name": "Renato Pilipović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Renato Pilipović", "url": "https://en.wikipedia.org/wiki/Renato_Pilipovi%C4%87"}},
+    {"name": "Robert Prosinečki", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Robert Prosinečki", "url": "https://en.wikipedia.org/wiki/Robert_Prosine%C4%8Dki"}},
+    {"name": "Silvio Marić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Silvio Marić", "url": "https://en.wikipedia.org/wiki/Silvio_Mari%C4%87"}},
+    {"name": "Zoran Pavlovič", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Zoran Pavlovič", "url": "https://en.wikipedia.org/wiki/Zoran_Pavlovi%C4%87"}},
+    {"name": "Antonio Franja", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Antonio Franja", "url": "https://en.wikipedia.org/wiki/Antonio_Franja"}},
+    {"name": "Enes Mešanović", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Enes Mešanović", "url": "https://en.wikipedia.org/wiki/Enes_Me%C5%A1anovi%C4%87"}},
+    {"name": "Erjon Rizvanolli", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Erjon Rizvanolli", "url": "https://en.wikipedia.org/wiki/Erjon_Rizvanolli"}},
+    {"name": "Feđa Dudić", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Feđa Dudić", "url": "https://en.wikipedia.org/wiki/Fe%C4%91a_Dudi%C4%87"}},
+    {"name": "Hrvatin Gudelj", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Hrvatin Gudelj", "url": "https://en.wikipedia.org/wiki/Hrvatin_Gudelj"}},
+    {"name": "Mate Dragičević", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mate Dragičević", "url": "https://en.wikipedia.org/wiki/Mate_Dragi%C4%8Devi%C4%87"}},
+    {"name": "Mirza Golubica", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mirza Golubica", "url": "https://en.wikipedia.org/wiki/Mirza_Golubica"}},
+    {"name": "Natko Rački", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Natko Rački", "url": "https://en.wikipedia.org/wiki/Natko_Ra%C4%8Dki"}},
+    {"name": "Petar Krpan", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Petar Krpan", "url": "https://en.wikipedia.org/wiki/Petar_Krpan"}},
+    {"name": "Renato Jurčec", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Renato Jurčec", "url": "https://en.wikipedia.org/wiki/Renato_Jur%C4%8Dec"}},
+    {"name": "Stanko Bubalo", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Stanko Bubalo", "url": "https://en.wikipedia.org/wiki/Stanko_Bubalo"}},
+    {"name": "Tomo Šokota", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Tomo Šokota", "url": "https://en.wikipedia.org/wiki/Tomo_%C5%A0okota"}},
+    {"name": "Zoran Ratković", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Zoran Ratković", "url": "https://en.wikipedia.org/wiki/Zoran_Ratkovi%C4%87"}},
+    {"name": "Zoran Slišković", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Zoran Slišković", "url": "https://en.wikipedia.org/wiki/Zoran_Sli%C5%A1kovi%C4%87"}},
+    {"name": "Danijel Šarić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.9, "source": {"name": "LZMK Nogometni leksikon — Šarić, Danijel", "url": "https://nogomet.lzmk.hr/clanak/saric-danijel"}},
+    {"name": "Gražvydas Mikulenas", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Gražvydas Mikulėnas", "url": "https://en.wikipedia.org/wiki/Gra%C5%BEvydas_Mikul%C4%97nas"}},
+    {"name": "Igor Đuzelov", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Igor Gjuzelov", "url": "https://en.wikipedia.org/wiki/Igor_Gjuzelov"}},
+    {"name": "Tonči Pirija", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Tonći Pirija", "url": "https://en.wikipedia.org/wiki/Ton%C4%87i_Pirija"}},
+    {"name": "Željko Suša", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Zeljko Susa", "url": "https://en.wikipedia.org/wiki/Zeljko_Susa"}},
+    {"name": "Branko Banović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.76, "source": {"name": "Transfermarkt — Branko Banović", "url": "https://www.transfermarkt.com/branko-banovic/leistungsdaten/spieler/42975/saison/"}},
+    {"name": "Domagoj Verhas", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.72, "source": {"name": "StatsCrew — Domagoj Verhas", "url": "https://www.statscrew.com/worldfootball/stats/p-verhadom001"}},
+    {"name": "Zoran Brlenić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.72, "source": {"name": "sport.de — Zoran Brlenić", "url": "https://www.sport.de/fussball/pe247212/zoran-brlenic/"}},
+    {"name": "Srđan Mladinić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.8, "source": {"name": "English Wikipedia — 1993 Croatian Football Super Cup lineup", "url": "https://en.wikipedia.org/wiki/1993_Croatian_Football_Super_Cup"}},
+    {"name": "Matos", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.7, "source": {"name": "oGol — Erick Matos de Oliveira", "url": "https://www.ogol.com.br/jogador/erick/813596?epoca_id=131"}},
+    {"name": "Munoz", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Juan Carlos Muñoz", "url": "https://en.wikipedia.org/wiki/Juan_Carlos_Mu%C3%B1oz_%28footballer%2C_born_1968%29"}},
+    {"name": "Bernard Brnjić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.76, "source": {"name": "Transfermarkt — Bernard Brnjić", "url": "https://www.transfermarkt.de/bernard-brnjic/profil/spieler/39945/"}},
+    {"name": "Đoni Tafra", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.82, "source": {"name": "English Wikipedia — Đoni Tafra", "url": "https://en.wikipedia.org/wiki/%C4%90oni_Tafra"}},
+    {"name": "Andre Mijatović", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Andre Mijatović", "url": "https://en.wikipedia.org/wiki/Andre_Mijatovi%C4%87"}},
+    {"name": "Elvis Brajković", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Elvis Brajković", "url": "https://en.wikipedia.org/wiki/Elvis_Brajkovi%C4%87"}},
+    {"name": "Dalibor Višković", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.82, "source": {"name": "English Wikipedia — Dalibor Višković", "url": "https://en.wikipedia.org/wiki/Dalibor_Vi%C5%A1kovi%C4%87"}},
+    {"name": "Goran Brajković", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Goran Brajković", "url": "https://en.wikipedia.org/wiki/Goran_Brajkovi%C4%87"}},
+    {"name": "Mario Meštrović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mario Meštrović", "url": "https://en.wikipedia.org/wiki/Mario_Me%C5%A1trovi%C4%87"}},
+    {"name": "Damir Matulović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Damir Matulović", "url": "https://en.wikipedia.org/wiki/Damir_Matulovi%C4%87"}},
+    {"name": "Ivan Maroslavac", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "English Wikipedia — Ivan Maroslavac", "url": "https://en.wikipedia.org/wiki/Ivan_Maroslavac"}},
+    {"name": "Mate Brajković", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Mate Brajković", "url": "https://en.wikipedia.org/wiki/Mate_Brajkovi%C4%87"}},
+    {"name": "Rajko Vidović", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.82, "source": {"name": "English Wikipedia — Rajko Vidović", "url": "https://en.wikipedia.org/wiki/Rajko_Vidovi%C4%87"}},
+    {"name": "Admir Malkić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.93, "source": {"name": "English Wikipedia — Admir Malkić", "url": "https://en.wikipedia.org/wiki/Admir_Malki%C4%87"}},
+    {"name": "Ahmad Sharbini", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.99, "source": {"name": "English Wikipedia — Ahmad Sharbini", "url": "https://en.wikipedia.org/wiki/Ahmad_Sharbini"}},
+    {"name": "Alen Pamić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.96, "source": {"name": "English Wikipedia — Alen Pamić", "url": "https://en.wikipedia.org/wiki/Alen_Pami%C4%87"}},
+    {"name": "Alen Škoro", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.99, "source": {"name": "English Wikipedia — Alen Škoro", "url": "https://en.wikipedia.org/wiki/Alen_%C5%A0koro"}},
+    {"name": "Anas Sharbini", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.93, "source": {"name": "English Wikipedia — Anas Sharbini", "url": "https://en.wikipedia.org/wiki/Anas_Sharbini"}},
+    {"name": "Dalibor Starčević", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.96, "source": {"name": "English Wikipedia — Dalibor Starčević", "url": "https://en.wikipedia.org/wiki/Dalibor_Star%C4%8Devi%C4%87"}},
+    {"name": "Daniel Šarić", "positionGroup": "DEF", "positions": ["RB"], "confidence": 0.97, "source": {"name": "English Wikipedia — Daniel Šarić", "url": "https://en.wikipedia.org/wiki/Daniel_%C5%A0ari%C4%87"}},
+    {"name": "Dario Dabac", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.95, "source": {"name": "English Wikipedia — Dario Dabac", "url": "https://en.wikipedia.org/wiki/Dario_Dabac"}},
+    {"name": "Dario Jertec", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.96, "source": {"name": "English Wikipedia — Dario Jertec", "url": "https://en.wikipedia.org/wiki/Dario_Jertec"}},
+    {"name": "Dario Knežević", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.97, "source": {"name": "English Wikipedia — Dario Knežević", "url": "https://en.wikipedia.org/wiki/Dario_Kne%C5%BEevi%C4%87"}},
+    {"name": "Davor Landeka", "positionGroup": "MID", "positions": ["CM"], "confidence": 0.97, "source": {"name": "English Wikipedia — Davor Landeka", "url": "https://en.wikipedia.org/wiki/Davor_Landeka"}},
+    {"name": "Davor Vugrinec", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.98, "source": {"name": "English Wikipedia — Davor Vugrinec", "url": "https://en.wikipedia.org/wiki/Davor_Vugrinec"}},
+    {"name": "Denis Ljubović", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.95, "source": {"name": "English Wikipedia — Denis Ljubović", "url": "https://en.wikipedia.org/wiki/Denis_Ljubovi%C4%87"}},
+    {"name": "Dino Raspor", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.99, "source": {"name": "HNS Semafor — HNK Rijeka v NK Inter-Zaprešić, 11 May 2008", "url": "https://semafor.hns.family/en/matches/46846/hnk-rijeka-nk-inter-zapresic-3-1/"}},
+    {"name": "Dragan Žilić", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.99, "source": {"name": "English Wikipedia — Dragan Žilić", "url": "https://en.wikipedia.org/wiki/Dragan_%C5%BDili%C4%87"}},
+    {"name": "Duje Baković", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.95, "source": {"name": "English Wikipedia — Duje Baković", "url": "https://en.wikipedia.org/wiki/Duje_Bakovi%C4%87"}},
+    {"name": "Dumitru Mitu", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.95, "source": {"name": "English Wikipedia — Dumitru Mitu", "url": "https://en.wikipedia.org/wiki/Dumitru_Mitu"}},
+    {"name": "Dušan Kerkez", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.97, "source": {"name": "English Wikipedia — Dušan Kerkez", "url": "https://en.wikipedia.org/wiki/Du%C5%A1an_Kerkez"}},
+    {"name": "Josip Butić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Josip Butić", "url": "https://en.wikipedia.org/wiki/Josip_Buti%C4%87"}},
+    {"name": "Josip Lukunić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Josip Lukunić", "url": "https://en.wikipedia.org/wiki/Josip_Lukuni%C4%87"}},
+    {"name": "Kenan Čejvanović", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Kenan Čejvanović", "url": "https://en.wikipedia.org/wiki/Kenan_%C4%8Cejvanovi%C4%87"}},
+    {"name": "Kristijan Čaval", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Kristijan Čaval", "url": "https://en.wikipedia.org/wiki/Kristijan_%C4%8Caval"}},
+    {"name": "Luka Vučko", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Luka Vučko", "url": "https://en.wikipedia.org/wiki/Luka_Vu%C4%8Dko"}},
+    {"name": "Marin Datković", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Marin Datković", "url": "https://en.wikipedia.org/wiki/Marin_Datkovi%C4%87"}},
+    {"name": "Marin Prpić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Marin Prpić", "url": "https://en.wikipedia.org/wiki/Marin_Prpi%C4%87"}},
+    {"name": "Mario Prišć", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Mario Prišć", "url": "https://en.wikipedia.org/wiki/Mario_Pri%C5%A1%C4%87"}},
+    {"name": "Mario Tadejević", "positionGroup": "DEF", "positions": ["LB"], "confidence": 0.84, "source": {"name": "English Wikipedia — Mario Tadejević", "url": "https://en.wikipedia.org/wiki/Mario_Tadejevi%C4%87"}},
+    {"name": "Mateo Bertoša", "positionGroup": "DEF", "positions": ["LB"], "confidence": 0.84, "source": {"name": "English Wikipedia — Mateo Bertoša", "url": "https://en.wikipedia.org/wiki/Mateo_Berto%C5%A1a"}},
+    {"name": "Matija Matko", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Matija Matko", "url": "https://en.wikipedia.org/wiki/Matija_Matko"}},
+    {"name": "Mikael Yourassowsky", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Mikael Yourassowsky", "url": "https://en.wikipedia.org/wiki/Mikael_Yourassowsky"}},
+    {"name": "Mislav Karoglan", "positionGroup": "MID", "positions": ["AM"], "confidence": 0.84, "source": {"name": "English Wikipedia — Mislav Karoglan", "url": "https://en.wikipedia.org/wiki/Mislav_Karoglan"}},
+    {"name": "Nastja Čeh", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Nastja Čeh", "url": "https://en.wikipedia.org/wiki/Nastja_%C4%8Ceh"}},
+    {"name": "Nedim Halilović", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Nedim Halilović", "url": "https://en.wikipedia.org/wiki/Nedim_Halilovi%C4%87"}},
+    {"name": "Neno Katulić", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Neno Katulić", "url": "https://en.wikipedia.org/wiki/Neno_Katuli%C4%87"}},
+    {"name": "Nikola Šafarić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Nikola Šafarić", "url": "https://en.wikipedia.org/wiki/Nikola_%C5%A0afari%C4%87"}},
+    {"name": "Radomir Đalović", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Radomir Đalović", "url": "https://en.wikipedia.org/wiki/Radomir_%C4%90alovi%C4%87"}},
+    {"name": "Ramón Ignacio Fernández", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Ramón Fernández", "url": "https://en.wikipedia.org/wiki/Ram%C3%B3n_Fern%C3%A1ndez_%28footballer%29"}},
+    {"name": "Sergej Jakirović", "positionGroup": "DEF", "positions": ["CB"], "confidence": 0.84, "source": {"name": "English Wikipedia — Sergej Jakirović", "url": "https://en.wikipedia.org/wiki/Sergej_Jakirovi%C4%87"}},
+    {"name": "Siniša Linić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Siniša Linić", "url": "https://en.wikipedia.org/wiki/Sini%C5%A1a_Lini%C4%87"}},
+    {"name": "Tarik Cerić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Tarik Cerić", "url": "https://en.wikipedia.org/wiki/Tarik_Ceri%C4%87"}},
+    {"name": "Toñito", "positionGroup": "MID", "positions": ["AM"], "confidence": 0.84, "source": {"name": "English Wikipedia — Toñito", "url": "https://en.wikipedia.org/wiki/To%C3%B1ito"}},
+    {"name": "Vedran Gerc", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.84, "source": {"name": "English Wikipedia — Vedran Gerc", "url": "https://en.wikipedia.org/wiki/Vedran_Gerc"}},
+    {"name": "Vedran Turkalj", "positionGroup": "DEF", "positions": ["CB"], "confidence": 0.84, "source": {"name": "English Wikipedia — Vedran Turkalj", "url": "https://en.wikipedia.org/wiki/Vedran_Turkalj"}},
+    {"name": "Vlade Lazarevski", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Vlade Lazarevski", "url": "https://en.wikipedia.org/wiki/Vlade_Lazarevski"}},
+    {"name": "Zoran Ivančić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Zoran Ivančić", "url": "https://en.wikipedia.org/wiki/Zoran_Ivan%C4%8Di%C4%87"}},
+    {"name": "Zoran Zekić", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.84, "source": {"name": "English Wikipedia — Zoran Zekić", "url": "https://en.wikipedia.org/wiki/Zoran_Zeki%C4%87"}},
+    {"name": "Edin Junuzović", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.96, "source": {"name": "English Wikipedia — Edin Junuzović", "url": "https://en.wikipedia.org/wiki/Edin_Junuzovi%C4%87"}},
+    {"name": "Elvir Bolić", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.99, "source": {"name": "English Wikipedia — Elvir Bolić", "url": "https://en.wikipedia.org/wiki/Elvir_Boli%C4%87"}},
+    {"name": "Fausto Budicin", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.96, "source": {"name": "English Wikipedia — Fausto Budicin", "url": "https://en.wikipedia.org/wiki/Fausto_Budicin"}},
+    {"name": "Filip Tapalović", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.96, "source": {"name": "English Wikipedia — Filip Tapalović", "url": "https://en.wikipedia.org/wiki/Filip_Tapalovi%C4%87"}},
+    {"name": "Fredi Bobic", "positionGroup": "FWD", "positions": ["ST"], "confidence": 0.99, "source": {"name": "English Wikipedia — Fredi Bobic", "url": "https://en.wikipedia.org/wiki/Fredi_Bobic"}},
+    {"name": "Igor Tkalčević", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.96, "source": {"name": "English Wikipedia — Igor Tkalčević", "url": "https://en.wikipedia.org/wiki/Igor_Tkal%C4%8Devi%C4%87"}},
+    {"name": "Igor Čagalj", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.97, "source": {"name": "English Wikipedia — Igor Čagalj", "url": "https://en.wikipedia.org/wiki/Igor_%C4%8Cagalj"}},
+    {"name": "Ivan Mance", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.99, "source": {"name": "English Wikipedia — Ivan Mance", "url": "https://en.wikipedia.org/wiki/Ivan_Mance"}},
+    {"name": "Ivan Sertić", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.96, "source": {"name": "English Wikipedia — Ivan Sertić", "url": "https://en.wikipedia.org/wiki/Ivan_Serti%C4%87"}},
+    {"name": "Ivica Marić", "positionGroup": "GK", "positions": ["GK"], "confidence": 0.99, "source": {"name": "English Wikipedia — Ivica Marić (footballer)", "url": "https://en.wikipedia.org/wiki/Ivica_Mari%C4%87_%28footballer%29"}},
+    {"name": "Ivor Weitzer", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.96, "source": {"name": "English Wikipedia — Ivor Weitzer", "url": "https://en.wikipedia.org/wiki/Ivor_Weitzer"}},
+    {"name": "Goran Rubil", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.78, "source": {"name": "English Wikipedia — Goran Rubil", "url": "https://en.wikipedia.org/wiki/Goran_Rubil"}},
+    {"name": "Bledi Shkëmbi", "positionGroup": "MID", "positions": ["AM"], "confidence": 0.84, "source": {"name": "English Wikipedia — Bledi Shkëmbi", "url": "https://en.wikipedia.org/wiki/Bledi_Shk%C3%ABmbi"}},
+    {"name": "Božidar Čačić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Božidar Čačić", "url": "https://en.wikipedia.org/wiki/Bo%C5%BEidar_%C4%8Ca%C4%8Di%C4%87"}},
+    {"name": "Edo Flego", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Edo Flego", "url": "https://en.wikipedia.org/wiki/Edo_Flego"}},
+    {"name": "Goran Vincetić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Goran Vincetić", "url": "https://en.wikipedia.org/wiki/Goran_Vinceti%C4%87"}},
+    {"name": "Igor Novaković", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.78, "source": {"name": "Croatian Wikipedia — Igor Novaković", "url": "https://hr.wikipedia.org/wiki/Igor_Novakovi%C4%87"}},
+    {"name": "Josip Modrić", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Josip Modrić", "url": "https://en.wikipedia.org/wiki/Josip_Modri%C4%87"}},
+    {"name": "Krešimir Brkić", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.82, "source": {"name": "Croatian Wikipedia — Krešimir Brkić", "url": "https://hr.wikipedia.org/wiki/Kre%C5%A1imir_Brki%C4%87"}},
+    {"name": "Matko Djarmati", "positionGroup": "MID", "positions": ["MID"], "confidence": 0.84, "source": {"name": "English Wikipedia — Matko Djarmati", "url": "https://en.wikipedia.org/wiki/Matko_Djarmati"}},
+    {"name": "Miroslav Vajs", "positionGroup": "DEF", "positions": ["DEF"], "confidence": 0.84, "source": {"name": "English Wikipedia — Miroslav Vajs", "url": "https://en.wikipedia.org/wiki/Miroslav_Vajs"}},
+    {"name": "Sandro Klić", "positionGroup": "FWD", "positions": ["FWD"], "confidence": 0.84, "source": {"name": "English Wikipedia — Sandro Klić", "url": "https://en.wikipedia.org/wiki/Sandro_Kli%C4%87"}}
+  ]
+}

@@ -134,3 +134,71 @@ test("ships a validated local crest for every catalog club identity", async () =
     );
   }
 });
+
+test("uses formation-specific pitch geometry and paced live match reveals", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const geometrySource = page.match(
+    /const FORMATION_COORDINATES:[^=]+=\s*(\{[\s\S]*?\n\});\n\nconst AI_MATCH_REVEAL_MS/,
+  );
+  assert.ok(geometrySource, "formation coordinate map is missing");
+  const geometry = JSON.parse(
+    geometrySource[1].replace(/,\s*([}\]])/g, "$1"),
+  );
+  const symmetry = {
+    "4-3-3": { pairs: [[1, 4], [2, 3], [6, 7], [8, 10]], centre: [0, 5, 9] },
+    "4-4-2": { pairs: [[1, 4], [2, 3], [5, 8], [6, 7], [9, 10]], centre: [0] },
+    "4-2-3-1": { pairs: [[1, 4], [2, 3], [5, 6], [7, 9]], centre: [0, 8, 10] },
+    "4-5-1": { pairs: [[1, 4], [2, 3], [5, 9], [6, 8]], centre: [0, 7, 10] },
+    "3-4-3": { pairs: [[1, 3], [4, 7], [5, 6], [8, 10]], centre: [0, 2, 9] },
+    "3-5-2": { pairs: [[1, 3], [4, 8], [6, 7], [9, 10]], centre: [0, 2, 5] },
+    "5-4-1": { pairs: [[1, 5], [2, 4], [6, 9], [7, 8]], centre: [0, 3, 10] },
+    "4-1-2-1-2": { pairs: [[1, 4], [2, 3], [6, 7], [9, 10]], centre: [0, 5, 8] },
+    "4-4-1-1": { pairs: [[1, 4], [2, 3], [5, 8], [6, 7]], centre: [0, 9, 10] },
+    "5-3-2": { pairs: [[1, 5], [2, 4], [6, 8], [9, 10]], centre: [0, 3, 7] },
+    "3-4-1-2": { pairs: [[1, 3], [4, 7], [5, 6], [9, 10]], centre: [0, 2, 8] },
+    "4-2-2-2": { pairs: [[1, 4], [2, 3], [5, 6], [7, 8], [9, 10]], centre: [0] },
+  };
+
+  assert.deepEqual(Object.keys(geometry).sort(), Object.keys(symmetry).sort());
+  for (const [formation, points] of Object.entries(geometry)) {
+    assert.equal(points.length, 11, `${formation} must place all eleven slots`);
+    for (const [x, y] of points) {
+      assert.ok(x >= 0 && x <= 100, `${formation} has an invalid x coordinate`);
+      assert.ok(y >= 0 && y <= 100, `${formation} has an invalid y coordinate`);
+    }
+    for (const [left, right] of symmetry[formation].pairs) {
+      assert.equal(
+        points[left][0] + points[right][0],
+        100,
+        `${formation} pair ${left}/${right} is not horizontally symmetric`,
+      );
+      assert.equal(
+        points[left][1],
+        points[right][1],
+        `${formation} pair ${left}/${right} is not level`,
+      );
+    }
+    for (const index of symmetry[formation].centre) {
+      assert.equal(
+        points[index][0],
+        50,
+        `${formation} central slot ${index} is not centred`,
+      );
+    }
+  }
+
+  assert.match(page, /normal:\s*1_400/);
+  assert.match(page, /normal:\s*4_400/);
+  assert.match(page, /function isManagerFixture/);
+  assert.match(page, /opponentGoalMinutes/);
+  assert.match(page, /revealMinute=\{displayedActiveMatchMinute\}/);
+  assert.match(
+    page,
+    /Math\.min\(90, displayedActiveMatchMinute\) \/ 90/,
+  );
+  assert.match(css, /\.manager-match-progress/);
+  assert.match(css, /\.match-card\.outcome-live/);
+});

@@ -1,0 +1,15 @@
+.git
+.agents
+.codex
+.openai
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+tests
+scripts
+web
+research
+*.md
+

@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Image from "next/image";
@@ -67,6 +68,9 @@ type Club = {
   shortName?: string;
   city?: string | null;
   accent?: string | null;
+  participantId?: string | null;
+  managerName?: string | null;
+  isHuman?: boolean;
 };
 
 type Season = {
@@ -103,6 +107,12 @@ type SeasonMatch = {
   goalsAgainst: number;
   outcome: "W" | "D" | "L";
   scorers: ScorerEvent[];
+  opponentScorers?: ScorerEvent[];
+  opponentGoalMinutes?: Array<number | string>;
+  opponentParticipantId?: string | null;
+  managerMatch?: boolean;
+  isManagerVsManager?: boolean;
+  matchType?: "league" | "manager-head-to-head";
   running?: {
     played: number;
     wins: number;
@@ -342,13 +352,191 @@ const FORMATION_PREVIEWS: Record<string, string[]> = {
   "4-2-3-1": ["GK", "RB", "CB", "CB", "LB", "DM", "DM", "RW", "AM", "LW", "ST"],
   "4-5-1": ["GK", "RB", "CB", "CB", "LB", "RM", "CM", "CM", "CM", "LM", "ST"],
   "3-4-3": ["GK", "CB", "CB", "CB", "RM", "CM", "CM", "LM", "RW", "ST", "LW"],
-  "3-5-2": ["GK", "CB", "CB", "CB", "RWB", "CM", "DM", "CM", "LWB", "ST", "ST"],
+  "3-5-2": ["GK", "CB", "CB", "CB", "RWB", "DM", "CM", "CM", "LWB", "ST", "ST"],
   "5-4-1": ["GK", "RWB", "CB", "CB", "CB", "LWB", "RM", "CM", "CM", "LM", "ST"],
   "4-1-2-1-2": ["GK", "RB", "CB", "CB", "LB", "DM", "CM", "CM", "AM", "ST", "ST"],
   "4-4-1-1": ["GK", "RB", "CB", "CB", "LB", "RM", "CM", "CM", "LM", "AM", "ST"],
   "5-3-2": ["GK", "RWB", "CB", "CB", "CB", "LWB", "CM", "CM", "CM", "ST", "ST"],
   "3-4-1-2": ["GK", "CB", "CB", "CB", "RM", "CM", "CM", "LM", "AM", "ST", "ST"],
   "4-2-2-2": ["GK", "RB", "CB", "CB", "LB", "DM", "DM", "AM", "AM", "ST", "ST"],
+};
+
+const EMPTY_SEASON_MATCHES: SeasonMatch[] = [];
+
+type PitchPoint = readonly [x: number, y: number];
+
+/*
+ * Coordinates follow the stable API slot order for each formation. Keeping the
+ * complete shape here avoids category-based spreading that pushes two holding
+ * midfielders to one side or leaves a lone central role off-centre.
+ */
+const FORMATION_COORDINATES: Record<string, readonly PitchPoint[]> = {
+  "4-3-3": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [50, 57],
+    [68, 44],
+    [32, 44],
+    [80, 21],
+    [50, 15],
+    [20, 21],
+  ],
+  "4-4-2": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [86, 46],
+    [62, 48],
+    [38, 48],
+    [14, 46],
+    [62, 16],
+    [38, 16],
+  ],
+  "4-2-3-1": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [64, 57],
+    [36, 57],
+    [82, 34],
+    [50, 35],
+    [18, 34],
+    [50, 15],
+  ],
+  "4-5-1": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [86, 45],
+    [67, 53],
+    [50, 44],
+    [33, 53],
+    [14, 45],
+    [50, 15],
+  ],
+  "3-4-3": [
+    [50, 89],
+    [70, 73],
+    [50, 75],
+    [30, 73],
+    [86, 47],
+    [62, 49],
+    [38, 49],
+    [14, 47],
+    [80, 21],
+    [50, 15],
+    [20, 21],
+  ],
+  "3-5-2": [
+    [50, 89],
+    [70, 73],
+    [50, 75],
+    [30, 73],
+    [90, 58],
+    [50, 57],
+    [67, 43],
+    [33, 43],
+    [10, 58],
+    [62, 16],
+    [38, 16],
+  ],
+  "5-4-1": [
+    [50, 89],
+    [90, 61],
+    [70, 73],
+    [50, 75],
+    [30, 73],
+    [10, 61],
+    [86, 45],
+    [62, 48],
+    [38, 48],
+    [14, 45],
+    [50, 15],
+  ],
+  "4-1-2-1-2": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [50, 58],
+    [68, 46],
+    [32, 46],
+    [50, 33],
+    [62, 15],
+    [38, 15],
+  ],
+  "4-4-1-1": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [86, 47],
+    [62, 49],
+    [38, 49],
+    [14, 47],
+    [50, 31],
+    [50, 14],
+  ],
+  "5-3-2": [
+    [50, 89],
+    [90, 61],
+    [70, 73],
+    [50, 75],
+    [30, 73],
+    [10, 61],
+    [68, 45],
+    [50, 47],
+    [32, 45],
+    [62, 16],
+    [38, 16],
+  ],
+  "3-4-1-2": [
+    [50, 89],
+    [70, 73],
+    [50, 75],
+    [30, 73],
+    [86, 48],
+    [62, 49],
+    [38, 49],
+    [14, 48],
+    [50, 32],
+    [62, 15],
+    [38, 15],
+  ],
+  "4-2-2-2": [
+    [50, 89],
+    [86, 70],
+    [62, 73],
+    [38, 73],
+    [14, 70],
+    [65, 57],
+    [35, 57],
+    [68, 35],
+    [32, 35],
+    [62, 15],
+    [38, 15],
+  ],
+};
+
+const AI_MATCH_REVEAL_MS: Record<SimulationSpeed, number> = {
+  normal: 1_400,
+  fast: 470,
+};
+
+const MANAGER_MATCH_REVEAL_MS: Record<SimulationSpeed, number> = {
+  normal: 4_400,
+  fast: 1_470,
 };
 
 const CLUB_CREST_IDS = new Set([
@@ -660,7 +848,16 @@ function simulateSeason(
   };
 }
 
-function slotPoint(slot: Slot, slots: Slot[]) {
+function slotPoint(slot: Slot, slots: Slot[], formation?: string) {
+  const formationPoints = formation
+    ? FORMATION_COORDINATES[formation]
+    : undefined;
+  const slotIndex = slots.findIndex((item) => item.id === slot.id);
+  const formationPoint = formationPoints?.[slotIndex];
+  if (formationPoint && formationPoints?.length === slots.length) {
+    return { x: formationPoint[0], y: formationPoint[1] };
+  }
+
   const sameCategory = slots.filter((item) => item.category === slot.category);
   const index = sameCategory.findIndex((item) => item.id === slot.id);
   const count = sameCategory.length;
@@ -690,6 +887,28 @@ function slotPoint(slot: Slot, slots: Slot[]) {
   if (label === "LWB") x = 10;
   if (label === "RWB") x = 90;
   return { x, y };
+}
+
+function matchMinuteValue(minute: number | string) {
+  if (typeof minute === "number") return minute;
+  const parsed = Number.parseInt(minute, 10);
+  return Number.isFinite(parsed) ? parsed : 90;
+}
+
+function isManagerFixture(
+  match: SeasonMatch | undefined,
+  participantIds: ReadonlySet<string>,
+) {
+  if (!match) return false;
+  return Boolean(
+    match.managerMatch ||
+      match.isManagerVsManager ||
+      match.matchType === "manager-head-to-head" ||
+      match.opponent.isHuman ||
+      match.opponentParticipantId ||
+      match.opponent.participantId ||
+      participantIds.has(match.opponent.id),
+  );
 }
 
 function Header({
@@ -874,19 +1093,64 @@ function ClubSeasonReel({ animation }: { animation: SpinAnimation }) {
 function MatchCard({
   match,
   featured = false,
+  revealMinute,
 }: {
   match: SeasonMatch;
   featured?: boolean;
+  revealMinute?: number;
 }) {
+  const isLiveReveal = typeof revealMinute === "number";
+  const displayedMinute = Math.max(0, Math.min(90, revealMinute ?? 90));
+  const isFullTime = !isLiveReveal || displayedMinute >= 90;
+  const visibleScorers = isLiveReveal
+    ? match.scorers.filter(
+        (event) => matchMinuteValue(event.minute) <= displayedMinute,
+      )
+    : match.scorers;
+  const opponentScorers =
+    match.opponentScorers ??
+    (match.opponentGoalMinutes ?? []).map((minute, index) => ({
+      playerId: `opponent-${index}`,
+      playerName:
+        match.opponent.managerName ??
+        match.opponent.shortName ??
+        match.opponent.name,
+      minute,
+    }));
+  const visibleOpponentScorers = isLiveReveal
+    ? opponentScorers.filter(
+        (event) => matchMinuteValue(event.minute) <= displayedMinute,
+      )
+    : opponentScorers;
+  const displayedGoalsFor = isFullTime
+    ? match.goalsFor
+    : visibleScorers.length;
+  const displayedGoalsAgainst = isFullTime
+    ? match.goalsAgainst
+    : visibleOpponentScorers.length;
+  const visibleGoalFeed = [
+    ...visibleScorers.map((event) => ({ ...event, against: false })),
+    ...visibleOpponentScorers.map((event) => ({ ...event, against: true })),
+  ].sort((a, b) => matchMinuteValue(a.minute) - matchMinuteValue(b.minute));
+
   return (
     <article
-      className={`match-card outcome-${match.outcome.toLowerCase()}${
-        featured ? " featured" : ""
-      }`}
+      className={[
+        "match-card",
+        isLiveReveal && !isFullTime
+          ? "outcome-live manager-match-live"
+          : `outcome-${match.outcome.toLowerCase()}`,
+        featured ? "featured" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <div className="match-card-top">
-        <span>KOLO {match.matchweek}</span>
-        <b>{match.outcome}</b>
+        <span>
+          KOLO {match.matchweek}
+          {isLiveReveal ? " · MENADŽER VS MENADŽER" : ""}
+        </span>
+        <b>{isLiveReveal ? (isFullTime ? "FT" : `${displayedMinute}′`) : match.outcome}</b>
       </div>
       <div className="match-opponent">
         <ClubShield club={match.opponent} compact />
@@ -895,23 +1159,44 @@ function MatchCard({
           <small>{match.venue === "H" ? "DOMA" : "U GOSTIMA"}</small>
         </div>
         <em>
-          {match.goalsFor}
+          {displayedGoalsFor}
           <i>–</i>
-          {match.goalsAgainst}
+          {displayedGoalsAgainst}
         </em>
       </div>
+      {isLiveReveal ? (
+        <div
+          className="manager-match-progress"
+          aria-label={
+            isFullTime
+              ? "Utakmica završena"
+              : `Utakmica u tijeku, ${displayedMinute}. minuta`
+          }
+        >
+          <span>0′</span>
+          <div aria-hidden="true">
+            <i style={{ width: `${(displayedMinute / 90) * 100}%` }} />
+          </div>
+          <strong>{isFullTime ? "FT" : "90′"}</strong>
+        </div>
+      ) : null}
       <div className="match-scorers">
-        {match.scorers.length ? (
+        {visibleGoalFeed.length ? (
           <>
             <span aria-hidden="true">⚽</span>
             <p>
-              {match.scorers.map((event, index) => (
-                <span key={`${event.playerId ?? event.playerName}-${event.minute}-${index}`}>
+              {visibleGoalFeed.map((event, index) => (
+                <span
+                  className={event.against ? "opponent-goal" : ""}
+                  key={`${event.playerId ?? event.playerName}-${event.minute}-${index}`}
+                >
                   {event.playerName} {formatMatchMinute(event.minute)}
                 </span>
               ))}
             </p>
           </>
+        ) : isLiveReveal && !isFullTime ? (
+          <p>Utakmica je u tijeku · bez pogodaka</p>
         ) : (
           <p>Bez pogodaka</p>
         )}
@@ -938,8 +1223,13 @@ export default function HnlDraftGame() {
   const [spinAnimation, setSpinAnimation] = useState<SpinAnimation | null>(null);
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase>("preview");
   const [revealedWeek, setRevealedWeek] = useState(0);
+  const [activeMatchClock, setActiveMatchClock] = useState({
+    key: "",
+    minute: 0,
+  });
   const [simulationSpeed, setSimulationSpeed] =
     useState<SimulationSpeed>("normal");
+  const activeMatchRef = useRef({ key: "", minute: 0 });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -1054,11 +1344,15 @@ export default function HnlDraftGame() {
     () => room?.participants.find((item) => item.id === participantId) ?? null,
     [participantId, room],
   );
+  const participantIds = useMemo(
+    () => new Set(room?.participants.map((participant) => participant.id) ?? []),
+    [room?.participants],
+  );
 
   const currentSpin = me?.currentSpin ?? null;
   const selectedPlayer =
     currentSpin?.players?.find((item) => item.id === selectedPlayerId) ?? null;
-  const seasonMatches = me?.result?.matches ?? [];
+  const seasonMatches = me?.result?.matches ?? EMPTY_SEASON_MATCHES;
 
   useEffect(() => {
     if (seasonPhase !== "running") return;
@@ -1066,30 +1360,90 @@ export default function HnlDraftGame() {
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const finished = revealedWeek >= seasonMatches.length;
-    const timer = window.setTimeout(
-      () => {
-        if (finished) {
-          setSeasonPhase("final");
-        } else {
+    if (finished) {
+      const finalTimer = window.setTimeout(
+        () => setSeasonPhase("final"),
+        reducedMotion ? 30 : 650,
+      );
+      return () => window.clearTimeout(finalTimer);
+    }
+
+    const match = seasonMatches[revealedWeek];
+    const managerFixture = isManagerFixture(match, participantIds);
+    if (!managerFixture) {
+      activeMatchRef.current = { key: "", minute: 0 };
+      const aiTimer = window.setTimeout(
+        () =>
           setRevealedWeek((current) =>
             Math.min(current + 1, seasonMatches.length),
-          );
-        }
-      },
-      finished
-        ? reducedMotion
-          ? 30
-          : 650
-        : reducedMotion
-          ? 24
-          : simulationSpeed === "fast"
-            ? 115
-            : 390,
-    );
-    return () => window.clearTimeout(timer);
+          ),
+        reducedMotion ? 24 : AI_MATCH_REVEAL_MS[simulationSpeed],
+      );
+      return () => window.clearTimeout(aiTimer);
+    }
+
+    const matchKey = `${match.matchweek}:${match.opponent.id}`;
+    const startingMinute =
+      activeMatchRef.current.key === matchKey
+        ? activeMatchRef.current.minute
+        : 0;
+    activeMatchRef.current = { key: matchKey, minute: startingMinute };
+
+    if (reducedMotion) {
+      const fullTimeTimer = window.setTimeout(() => {
+        activeMatchRef.current.minute = 90;
+        setActiveMatchClock({ key: matchKey, minute: 90 });
+      }, 0);
+      const reducedTimer = window.setTimeout(
+        () =>
+          setRevealedWeek((current) =>
+            Math.min(current + 1, seasonMatches.length),
+          ),
+        40,
+      );
+      return () => {
+        window.clearTimeout(fullTimeTimer);
+        window.clearTimeout(reducedTimer);
+      };
+    }
+
+    const totalDuration = MANAGER_MATCH_REVEAL_MS[simulationSpeed];
+    const fullTimeHold = simulationSpeed === "fast" ? 150 : 400;
+    const minuteRange = Math.max(0, 90 - startingMinute);
+    const progressDuration =
+      ((totalDuration - fullTimeHold) * minuteRange) / 90;
+    const startedAt = window.performance.now();
+    const progressTimer = window.setInterval(() => {
+      const elapsed = window.performance.now() - startedAt;
+      const minute = Math.min(
+        90,
+        Math.floor(
+          startingMinute +
+            (elapsed / Math.max(1, progressDuration)) * minuteRange,
+        ),
+      );
+      activeMatchRef.current.minute = minute;
+      setActiveMatchClock({ key: matchKey, minute });
+    }, 90);
+    const fullTimeTimer = window.setTimeout(() => {
+      activeMatchRef.current.minute = 90;
+      setActiveMatchClock({ key: matchKey, minute: 90 });
+    }, progressDuration);
+    const completeTimer = window.setTimeout(() => {
+      setRevealedWeek((current) =>
+        Math.min(current + 1, seasonMatches.length),
+      );
+    }, progressDuration + fullTimeHold);
+
+    return () => {
+      window.clearInterval(progressTimer);
+      window.clearTimeout(fullTimeTimer);
+      window.clearTimeout(completeTimer);
+    };
   }, [
+    participantIds,
     revealedWeek,
-    seasonMatches.length,
+    seasonMatches,
     seasonPhase,
     simulationSpeed,
   ]);
@@ -1829,7 +2183,11 @@ export default function HnlDraftGame() {
             <div className="mini-pitch" aria-label={`Pregled ${setup.formation}`}>
               <div className="pitch-markings" aria-hidden="true" />
               {previewObjects.map((slot) => {
-                const point = slotPoint(slot, previewObjects);
+                const point = slotPoint(
+                  slot,
+                  previewObjects,
+                  setup.formation,
+                );
                 return (
                   <span
                     key={slot.id}
@@ -1968,7 +2326,11 @@ export default function HnlDraftGame() {
       <div className="draft-pitch" aria-label={`Formacija ${room.settings.formation}`}>
         <div className="pitch-markings" aria-hidden="true" />
         {room.settings.slots.map((slot) => {
-          const point = slotPoint(slot, room.settings.slots);
+          const point = slotPoint(
+            slot,
+            room.settings.slots,
+            room.settings.formation,
+          );
           const pick = me.picks.find((item) => item.slotId === slot.id);
           const playerCanFill = selectedPlayer?.eligibleSlotIds?.includes(slot.id);
           const canChoosePosition =
@@ -2338,7 +2700,9 @@ export default function HnlDraftGame() {
   };
 
   const startSeasonSimulation = () => {
+    activeMatchRef.current = { key: "", minute: 0 };
     setRevealedWeek(0);
+    setActiveMatchClock({ key: "", minute: 0 });
     setSimulationSpeed("normal");
     setSeasonPhase(seasonMatches.length ? "running" : "final");
   };
@@ -2469,9 +2833,32 @@ export default function HnlDraftGame() {
       const visibleMatches = seasonMatches.slice(0, revealedWeek);
       const running =
         visibleMatches.at(-1)?.running ?? aggregateMatches(visibleMatches);
-      const latestMatches = visibleMatches.slice(-3).reverse();
+      const activeMatch = seasonMatches[revealedWeek];
+      const activeManagerFixture = isManagerFixture(
+        activeMatch,
+        participantIds,
+      );
+      const activeMatchKey = activeMatch
+        ? `${activeMatch.matchweek}:${activeMatch.opponent.id}`
+        : "";
+      const displayedActiveMatchMinute =
+        activeMatchClock.key === activeMatchKey
+          ? activeMatchClock.minute
+          : 0;
+      const latestMatches = visibleMatches
+        .slice(activeManagerFixture ? -2 : -3)
+        .reverse();
+      const currentRound = Math.min(
+        seasonMatches.length,
+        revealedWeek + (revealedWeek < seasonMatches.length ? 1 : 0),
+      );
+      const progressWeeks =
+        revealedWeek +
+        (activeManagerFixture
+          ? Math.min(90, displayedActiveMatchMinute) / 90
+          : 0);
       const progress = seasonMatches.length
-        ? (revealedWeek / seasonMatches.length) * 100
+        ? (progressWeeks / seasonMatches.length) * 100
         : 0;
       return (
         <main id="main-content" className="simulation-screen">
@@ -2494,7 +2881,7 @@ export default function HnlDraftGame() {
               <div>
                 <span>SIMULACIJA UŽIVO</span>
                 <h1>
-                  Kolo {revealedWeek} <i>/ {seasonMatches.length || 36}</i>
+                  Kolo {currentRound} <i>/ {seasonMatches.length || 36}</i>
                 </h1>
               </div>
               <div className="simulation-controls">
@@ -2515,6 +2902,8 @@ export default function HnlDraftGame() {
                 </button>
                 <button
                   onClick={() => {
+                    activeMatchRef.current = { key: "", minute: 0 };
+                    setActiveMatchClock({ key: "", minute: 0 });
                     setRevealedWeek(seasonMatches.length);
                     setSeasonPhase("final");
                   }}
@@ -2523,11 +2912,30 @@ export default function HnlDraftGame() {
                 </button>
               </div>
             </header>
-            <div className="season-progress" aria-label={`${revealedWeek} od 36 kola`}>
+            <div
+              className="season-progress"
+              aria-label={
+                activeManagerFixture
+                  ? `${revealedWeek} završenih kola, ${displayedActiveMatchMinute}. minuta sljedeće utakmice`
+                  : `${revealedWeek} od 36 kola`
+              }
+            >
               <i style={{ width: `${progress}%` }} />
             </div>
             <div className="live-match-stack" aria-live="polite">
-              {latestMatches.length ? (
+              {activeManagerFixture && activeMatch ? (
+                <>
+                  <MatchCard
+                    key={`active-${activeMatch.matchweek}`}
+                    match={activeMatch}
+                    featured
+                    revealMinute={displayedActiveMatchMinute}
+                  />
+                  {latestMatches.map((match) => (
+                    <MatchCard key={match.matchweek} match={match} />
+                  ))}
+                </>
+              ) : latestMatches.length ? (
                 latestMatches.map((match, index) => (
                   <MatchCard
                     key={match.matchweek}

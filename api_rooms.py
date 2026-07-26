@@ -1011,6 +1011,20 @@ class Catalog:
         if not isinstance(positions_value, list) or not positions_value:
             raise ValueError(f"Player {name!r} is missing positions.")
         positions = list(dict.fromkeys(_position(item) for item in positions_value))
+        if "GK" in positions and positions != ["GK"]:
+            raise ValueError(
+                f"Player {name!r} cannot combine goalkeeper and outfield positions."
+            )
+        if "UNK" in positions and positions != ["UNK"]:
+            raise ValueError(
+                f"Player {name!r} cannot combine an unknown and verified position."
+            )
+        raw_draft_eligible = raw.get("draftEligible", True)
+        if not isinstance(raw_draft_eligible, bool):
+            raise ValueError(
+                f"Player {name!r} has a non-boolean draftEligible value."
+            )
+        draft_eligible = raw_draft_eligible and positions != ["UNK"]
         player_id = _first(raw, "id", "playerSeasonId", "player_season_id")
         player_id = str(player_id or f"{_slug(name)}-{record_id}")
         person_id = str(
@@ -1060,6 +1074,7 @@ class Catalog:
             "personId": person_id,
             "name": name,
             "positions": positions,
+            "draftEligible": draft_eligible,
             "nationality": _first(raw, "nationality", "Nationality"),
             "age": _first(raw, "age", "Age"),
             "seasonRating": base_rating,
@@ -1077,6 +1092,8 @@ class Catalog:
             "source": raw.get("source")
             or raw.get("sources")
             or raw.get("statsSource"),
+            "positionSource": raw.get("positionSource"),
+            "positionDisclosure": raw.get("positionDisclosure"),
             "confidence": raw.get("confidence"),
         }
 
@@ -1510,6 +1527,8 @@ class RoomStore:
         person_ids = self._selected_person_ids(picks_list)
         options: list[tuple[dict[str, Any], list[Slot]]] = []
         for player in record["players"]:
+            if not player.get("draftEligible", True):
+                continue
             if player["id"] in player_ids:
                 continue
             if (
@@ -1536,11 +1555,14 @@ class RoomStore:
                 "personId",
                 "name",
                 "positions",
+                "draftEligible",
                 "nationality",
                 "age",
                 "ratingKind",
                 "stats",
                 "source",
+                "positionSource",
+                "positionDisclosure",
                 "confidence",
             )
         }
@@ -1773,15 +1795,130 @@ class RoomStore:
         return events
 
     @staticmethod
-    def _projection(average_rating: float) -> dict[str, Any]:
-        opponent_ratings = [
-            float(opponent["rating"]) for opponent in HNL_SIMULATION_OPPONENTS
-        ]
+    def _derived_rng(room_seed: int, *labels: object) -> random.Random:
+        material = "|".join([str(room_seed), *(str(label) for label in labels)])
+        seed = int.from_bytes(
+            hashlib.sha256(material.encode("utf-8")).digest()[:8],
+            "big",
+        )
+        return random.Random(seed)
+
+    @staticmethod
+    def _animation_timeline(
+        venue: str,
+        scorers: list[Mapping[str, Any]],
+        opponent_scorers: list[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Build a stable 0′→FT animation contract from goal events."""
+        duration_ms = 4_400
+        full_time_hold_ms = 400
+        staged_events: list[dict[str, Any]] = []
+        for event in scorers:
+            staged_events.append(
+                {"type": "goal", "side": "for", **dict(event)}
+            )
+        for event in opponent_scorers:
+            staged_events.append(
+                {"type": "goal", "side": "against", **dict(event)}
+            )
+        staged_events.sort(
+            key=lambda event: (
+                int(event["minute"]),
+                0 if event["side"] == "for" else 1,
+                str(event.get("playerId") or event.get("playerName") or ""),
+            )
+        )
+        goals_for = goals_against = 0
+
+        def frame(
+            *,
+            sequence: int,
+            minute: int,
+            minute_label: str,
+            at_ms: int,
+            events: list[Mapping[str, Any]],
+        ) -> dict[str, Any]:
+            home_goals = goals_for if venue == "H" else goals_against
+            away_goals = goals_against if venue == "H" else goals_for
+            return {
+                "sequence": sequence,
+                "minute": minute,
+                "minuteLabel": minute_label,
+                "progress": round(minute / 90.0, 4),
+                "atMs": at_ms,
+                "goalsFor": goals_for,
+                "goalsAgainst": goals_against,
+                "homeGoals": home_goals,
+                "awayGoals": away_goals,
+                "event": dict(events[-1]) if events else None,
+                "events": [dict(event) for event in events],
+            }
+
+        events_by_minute: dict[int, list[dict[str, Any]]] = {}
+        for event in staged_events:
+            minute = max(1, min(90, int(event["minute"])))
+            events_by_minute.setdefault(minute, []).append(event)
+        timeline: list[dict[str, Any]] = []
+        for minute in range(91):
+            minute_events = events_by_minute.get(minute, [])
+            for event in minute_events:
+                if event["side"] == "for":
+                    goals_for += 1
+                else:
+                    goals_against += 1
+            timeline.append(
+                frame(
+                    sequence=minute,
+                    minute=minute,
+                    minute_label=f"{minute}′",
+                    at_ms=round(
+                        (minute / 90.0)
+                        * (duration_ms - full_time_hold_ms)
+                    ),
+                    events=minute_events,
+                )
+            )
+        timeline.append(
+            frame(
+                sequence=len(timeline),
+                minute=90,
+                minute_label="FT",
+                at_ms=duration_ms,
+                events=[],
+            )
+        )
+        return {
+            "version": 1,
+            "recommendedDurationMs": duration_ms,
+            "extraDurationMs": 3_000,
+            "fullTimeHoldMs": full_time_hold_ms,
+            "minuteTickMs": round(
+                (duration_ms - full_time_hold_ms) / 90
+            ),
+            "startMinute": 0,
+            "endMinute": 90,
+            "startLabel": "0′",
+            "endLabel": "FT",
+            "goalEventCount": len(staged_events),
+            "timeline": timeline,
+        }
+
+    @staticmethod
+    def _projection(
+        average_rating: float,
+        opponent_ratings: Iterable[float] | None = None,
+    ) -> dict[str, Any]:
+        opponent_rating_list = list(opponent_ratings or ())
+        if not opponent_rating_list:
+            opponent_rating_list = [
+                float(opponent["rating"])
+                for opponent in HNL_SIMULATION_OPPONENTS
+            ]
         projected_position = (
             1
             + sum(
                 opponent_rating > average_rating
-                for opponent_rating in opponent_ratings
+                for opponent_rating in opponent_rating_list
             )
         )
         expected_points = max(
@@ -1846,6 +1983,10 @@ class RoomStore:
         room_seed: int,
         seat: int,
         picks: Iterable[Mapping[str, Any]],
+        *,
+        drafted_team_id: str = "drafted-xi",
+        drafted_team_name: str = "Draft XI",
+        manager_teams: Iterable[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Simulate one deterministic ten-team, 36-match HNL-style season.
 
@@ -1860,27 +2001,90 @@ class RoomStore:
             if isinstance(pick.get("selectedRating"), (int, float))
         ]
         average = sum(ratings) / len(ratings) if ratings else 70.0
-        material = f"{room_seed}|seat:{seat}|season-result:v2"
+        material = f"{room_seed}|seat:{seat}|season-result:v3"
         result_seed = int.from_bytes(
             hashlib.sha256(material.encode("utf-8")).digest()[:8],
             "big",
         )
-        rng = random.Random(result_seed)
-        drafted_id = "drafted-xi"
+        drafted_id = drafted_team_id
+        if manager_teams is None:
+            normalized_managers: list[dict[str, Any]] = [
+                {
+                    "id": drafted_id,
+                    "participantId": None,
+                    "seat": seat,
+                    "name": drafted_team_name,
+                    "shortName": "XI",
+                    "rating": average,
+                    "accent": "#f2c94c",
+                    "picks": picks_list,
+                    "isManager": True,
+                }
+            ]
+        else:
+            normalized_managers = []
+            for manager in manager_teams:
+                manager_picks = list(manager.get("picks") or [])
+                manager_ratings = [
+                    float(pick["selectedRating"])
+                    for pick in manager_picks
+                    if isinstance(pick.get("selectedRating"), (int, float))
+                ]
+                manager_rating = (
+                    sum(manager_ratings) / len(manager_ratings)
+                    if manager_ratings
+                    else 70.0
+                )
+                normalized_managers.append(
+                    {
+                        "id": str(manager["id"]),
+                        "participantId": manager.get("participantId"),
+                        "seat": int(manager.get("seat", 0)),
+                        "name": str(manager["name"]),
+                        "shortName": str(
+                            manager.get("shortName") or manager["name"]
+                        )[:16],
+                        "rating": float(
+                            manager.get("rating", manager_rating)
+                        ),
+                        "accent": str(
+                            manager.get("accent") or "#f2c94c"
+                        ),
+                        "picks": manager_picks,
+                        "isManager": True,
+                    }
+                )
+            normalized_managers.sort(
+                key=lambda manager: (manager["seat"], manager["id"])
+            )
+        if not 1 <= len(normalized_managers) <= 4:
+            raise ValueError("A simulated room requires one to four managers.")
+        if drafted_id not in {manager["id"] for manager in normalized_managers}:
+            raise ValueError("The drafted manager is missing from manager_teams.")
+        static_count = 10 - len(normalized_managers)
         teams: list[dict[str, Any]] = [
-            {
-                "id": drafted_id,
-                "name": "Draft XI",
-                "shortName": "XI",
-                "rating": average,
-                "accent": "#f2c94c",
-                "isDraftedXI": True,
-            },
+            *normalized_managers,
             *[
-                {**opponent, "isDraftedXI": False}
-                for opponent in HNL_SIMULATION_OPPONENTS
+                {
+                    **opponent,
+                    "participantId": None,
+                    "picks": [],
+                    "isManager": False,
+                }
+                for opponent in HNL_SIMULATION_OPPONENTS[:static_count]
             ],
         ]
+        for team in teams:
+            team["isDraftedXI"] = team["id"] == drafted_id
+        season_id = _sha256(
+            "|".join(
+                [
+                    str(room_seed),
+                    "shared-room-season-v1",
+                    *(manager["id"] for manager in normalized_managers),
+                ]
+            )
+        )[:20]
         teams_by_id = {team["id"]: team for team in teams}
         table_stats: dict[str, dict[str, int]] = {
             team["id"]: {
@@ -1895,22 +2099,26 @@ class RoomStore:
             }
             for team in teams
         }
-        player_stats_by_id: dict[str, dict[str, Any]] = {}
-        for pick in picks_list:
-            player = pick["player"]
-            player_id = str(player["id"])
-            player_stats_by_id[player_id] = {
-                "playerId": player_id,
-                "playerName": player["name"],
-                "slotId": pick.get("slotId"),
-                "positions": list(player.get("positions") or []),
-                "rating": pick.get("selectedRating"),
-                "appearances": 36,
-                "starts": 36,
-                "goals": 0,
-                "assists": 0,
-                "cleanSheets": 0,
-            }
+        player_stats_by_team: dict[str, dict[str, dict[str, Any]]] = {}
+        for team in normalized_managers:
+            team_stats: dict[str, dict[str, Any]] = {}
+            for pick in team["picks"]:
+                player = pick["player"]
+                player_id = str(player["id"])
+                team_stats[player_id] = {
+                    "playerId": player_id,
+                    "playerName": player["name"],
+                    "slotId": pick.get("slotId"),
+                    "positions": list(player.get("positions") or []),
+                    "rating": pick.get("selectedRating"),
+                    "appearances": 36,
+                    "starts": 36,
+                    "goals": 0,
+                    "assists": 0,
+                    "cleanSheets": 0,
+                }
+            player_stats_by_team[team["id"]] = team_stats
+        player_stats_by_id = player_stats_by_team[drafted_id]
 
         schedule = cls._league_schedule([team["id"] for team in teams])
         matches: list[dict[str, Any]] = []
@@ -1964,6 +2172,14 @@ class RoomStore:
             for home_id, away_id in pairings:
                 home = teams_by_id[home_id]
                 away = teams_by_id[away_id]
+                fixture_id = f"mw-{matchweek}:{home_id}:{away_id}"
+                score_rng = cls._derived_rng(
+                    room_seed,
+                    "shared-league-score-v1",
+                    matchweek,
+                    home_id,
+                    away_id,
+                )
                 rating_difference = float(home["rating"]) - float(away["rating"])
                 expected_home = max(
                     0.08,
@@ -1973,9 +2189,47 @@ class RoomStore:
                     0.08,
                     min(5.8, 1.13 * math.exp(-0.039 * rating_difference)),
                 )
-                home_goals = cls._sample_poisson(rng, expected_home)
-                away_goals = cls._sample_poisson(rng, expected_away)
+                home_goals = cls._sample_poisson(score_rng, expected_home)
+                away_goals = cls._sample_poisson(score_rng, expected_away)
                 apply_table_result(home_id, away_id, home_goals, away_goals)
+                home_scorers: list[dict[str, Any]] = []
+                away_scorers: list[dict[str, Any]] = []
+                if home["isManager"]:
+                    home_scorers = cls._goal_events(
+                        cls._derived_rng(
+                            room_seed,
+                            "shared-league-events-v1",
+                            matchweek,
+                            home_id,
+                        ),
+                        list(home["picks"]),
+                        home_goals,
+                        player_stats_by_team[home_id],
+                    )
+                    if away_goals == 0:
+                        for player_stat in player_stats_by_team[
+                            home_id
+                        ].values():
+                            if "GK" in player_stat["positions"]:
+                                player_stat["cleanSheets"] += 1
+                if away["isManager"]:
+                    away_scorers = cls._goal_events(
+                        cls._derived_rng(
+                            room_seed,
+                            "shared-league-events-v1",
+                            matchweek,
+                            away_id,
+                        ),
+                        list(away["picks"]),
+                        away_goals,
+                        player_stats_by_team[away_id],
+                    )
+                    if home_goals == 0:
+                        for player_stat in player_stats_by_team[
+                            away_id
+                        ].values():
+                            if "GK" in player_stat["positions"]:
+                                player_stat["cleanSheets"] += 1
                 if drafted_id not in {home_id, away_id}:
                     continue
                 at_home = home_id == drafted_id
@@ -2006,26 +2260,65 @@ class RoomStore:
                 running["goalDifference"] = (
                     running["goalsFor"] - running["goalsAgainst"]
                 )
-                scorers = cls._goal_events(
-                    rng,
-                    picks_list,
-                    goals_for,
-                    player_stats_by_id,
-                )
-                if goals_against == 0:
-                    for player_stat in player_stats_by_id.values():
-                        if "GK" in player_stat["positions"]:
-                            player_stat["cleanSheets"] += 1
-                opponent_goal_minutes = sorted(
-                    rng.randint(1, 90) for _ in range(goals_against)
-                )
+                scorers = home_scorers if at_home else away_scorers
+                opponent_scorers = away_scorers if at_home else home_scorers
+                if not opponent["isManager"]:
+                    opponent_minutes_rng = cls._derived_rng(
+                        room_seed,
+                        "shared-league-static-events-v1",
+                        matchweek,
+                        opponent["id"],
+                    )
+                    opponent_scorers = [
+                        {
+                            "playerId": None,
+                            "playerName": f"{opponent['shortName']} strijelac",
+                            "minute": minute,
+                        }
+                        for minute in sorted(
+                            opponent_minutes_rng.randint(1, 90)
+                            for _ in range(goals_against)
+                        )
+                    ]
+                opponent_goal_minutes = [
+                    int(event["minute"]) for event in opponent_scorers
+                ]
+                venue = "H" if at_home else "A"
+                is_manager_match = bool(opponent["isManager"])
+                if is_manager_match:
+                    animation = cls._animation_timeline(
+                        venue,
+                        scorers,
+                        opponent_scorers,
+                    )
+                    animation_timeline = animation.pop("timeline")
+                else:
+                    animation = {
+                        "version": 1,
+                        "recommendedDurationMs": 1_400,
+                        "extraDurationMs": 0,
+                    }
+                    animation_timeline = None
                 drafted_match = {
+                    "fixtureId": fixture_id,
                     "matchweek": matchweek,
                     "opponent": {
-                        key: opponent[key]
-                        for key in ("id", "name", "shortName", "accent")
+                        **{
+                            key: opponent[key]
+                            for key in ("id", "name", "shortName", "accent")
+                        },
+                        "type": (
+                            "manager" if is_manager_match else "club"
+                        ),
+                        "isHuman": is_manager_match,
+                        "participantId": opponent.get("participantId"),
+                        "managerSeat": (
+                            opponent.get("seat")
+                            if is_manager_match
+                            else None
+                        ),
                     },
-                    "venue": "H" if at_home else "A",
+                    "venue": venue,
                     "homeTeamId": home_id,
                     "awayTeamId": away_id,
                     "homeGoals": home_goals,
@@ -2037,9 +2330,31 @@ class RoomStore:
                     "expectedGoalsFor": round(expected_for, 2),
                     "expectedGoalsAgainst": round(expected_against, 2),
                     "scorers": scorers,
+                    "opponentScorers": opponent_scorers,
                     "opponentGoalMinutes": opponent_goal_minutes,
+                    "matchType": (
+                        "manager-head-to-head"
+                        if is_manager_match
+                        else "league"
+                    ),
+                    "isManagerVsManager": is_manager_match,
+                    "headToHead": (
+                        {
+                            "fixtureId": fixture_id,
+                            "opponentParticipantId": opponent.get(
+                                "participantId"
+                            ),
+                            "opponentManagerName": opponent["name"],
+                            "opponentManagerSeat": opponent.get("seat"),
+                        }
+                        if is_manager_match
+                        else None
+                    ),
+                    "animation": animation,
                     "running": dict(running),
                 }
+                if animation_timeline is not None:
+                    drafted_match["timeline"] = animation_timeline
             if drafted_match is None:
                 raise RuntimeError(
                     f"Drafted XI is missing from matchweek {matchweek}."
@@ -2054,6 +2369,11 @@ class RoomStore:
                     "name": team["name"],
                     "shortName": team["shortName"],
                     "accent": team["accent"],
+                    "isHuman": bool(team["isManager"]),
+                    "participantId": team.get("participantId"),
+                    "managerSeat": (
+                        team.get("seat") if team["isManager"] else None
+                    ),
                     "isDraftedXI": team["isDraftedXI"],
                     **table_stats[team["id"]],
                 }
@@ -2172,7 +2492,14 @@ class RoomStore:
         )
         biggest_win = cls._match_record(biggest_win_match)
         highest_scoring = cls._match_record(highest_scoring_match)
-        projection = cls._projection(average)
+        projection = cls._projection(
+            average,
+            [
+                float(team["rating"])
+                for team in teams
+                if team["id"] != drafted_id
+            ],
+        )
         records = {
             **streaks,
             "longestWinningStreak": streaks["longestWinning"],
@@ -2194,10 +2521,20 @@ class RoomStore:
             "playerOfSeason": player_of_season,
         }
         return {
-            "model": "editorial-rating-poisson-v2",
+            "model": "editorial-rating-poisson-v3",
             "confidence": 0.35,
             "disclosure": "Game output, not an official forecast or betting model.",
             "seed": result_seed,
+            "seasonId": season_id,
+            "seasonMode": (
+                "shared-live"
+                if len(normalized_managers) > 1
+                else "solo"
+            ),
+            "managerTeamId": drafted_id,
+            "managerParticipantId": teams_by_id[drafted_id].get(
+                "participantId"
+            ),
             "played": drafted_row["played"],
             "wins": drafted_row["wins"],
             "draws": drafted_row["draws"],
@@ -2236,10 +2573,53 @@ class RoomStore:
             "SELECT * FROM participants WHERE room_code = ? ORDER BY seat",
             (room["code"],),
         ).fetchall()
+        picks_by_participant = {
+            row["id"]: self._picks(connection, row["id"])
+            for row in participant_rows
+        }
+        shared_manager_teams: list[dict[str, Any]] | None = None
+        if (
+            room["mode"] == "live"
+            and len(participant_rows) > 1
+            and room["status"] == "complete"
+        ):
+            manager_accents = (
+                "#f2c94c",
+                "#4ea5ff",
+                "#ef5b5b",
+                "#60c689",
+            )
+            shared_manager_teams = []
+            for manager_row in participant_rows:
+                manager_picks = picks_by_participant[manager_row["id"]]
+                manager_ratings = [
+                    float(pick["selectedRating"])
+                    for pick in manager_picks
+                    if isinstance(pick.get("selectedRating"), (int, float))
+                ]
+                shared_manager_teams.append(
+                    {
+                        "id": f"manager-seat-{manager_row['seat']}",
+                        "participantId": manager_row["id"],
+                        "seat": manager_row["seat"],
+                        "name": manager_row["name"],
+                        "shortName": manager_row["name"][:16],
+                        "rating": (
+                            sum(manager_ratings) / len(manager_ratings)
+                            if manager_ratings
+                            else 70.0
+                        ),
+                        "accent": manager_accents[
+                            (manager_row["seat"] - 1)
+                            % len(manager_accents)
+                        ],
+                        "picks": manager_picks,
+                    }
+                )
         participants = []
         room_complete = room["status"] == "complete"
         for row in participant_rows:
-            picks = self._picks(connection, row["id"])
+            picks = picks_by_participant[row["id"]]
             reveal = settings["showRatings"] or room_complete
             visible_picks = []
             for pick in picks:
@@ -2255,11 +2635,24 @@ class RoomStore:
                 for pick in picks
                 if isinstance(pick.get("selectedRating"), (int, float))
             ]
-            result = (
-                self._season_result(room["seed"], row["seat"], picks)
-                if room_complete
-                else None
-            )
+            if room_complete and shared_manager_teams is not None:
+                result = self._season_result(
+                    room["seed"],
+                    row["seat"],
+                    picks,
+                    drafted_team_id=f"manager-seat-{row['seat']}",
+                    drafted_team_name=row["name"],
+                    manager_teams=shared_manager_teams,
+                )
+            elif room_complete:
+                result = self._season_result(
+                    room["seed"],
+                    row["seat"],
+                    picks,
+                    drafted_team_name=row["name"],
+                )
+            else:
+                result = None
             participants.append(
                 {
                     "id": row["id"],
