@@ -1,0 +1,57 @@
+{
+	email {$ACME_EMAIL}
+
+	# Cloudflare's published proxy networks as of 2026-07-26. Requests that
+	# arrive directly at the origin remain untrusted, so their forwarding
+	# headers cannot spoof the client address.
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		trusted_proxies_strict
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	@api path /api /api/*
+	handle @api {
+		uri strip_prefix /api
+		header Cache-Control "no-store"
+		reverse_proxy api:8000 {
+			# Always derive these at the trusted edge. Direct-origin callers
+			# cannot forge the address used by the API login rate limiter.
+			header_up CF-Connecting-IP {client_ip}
+			header_up X-Forwarded-For {client_ip}
+			health_uri /health
+			health_interval 30s
+			fail_duration 10s
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			health_uri /
+			health_interval 30s
+			fail_duration 10s
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

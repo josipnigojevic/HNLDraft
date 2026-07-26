@@ -27,6 +27,21 @@ Default HTTP contract (JSON request/response bodies):
       {"participantToken":"...","expectedVersion":4,"expectedTurn":0,
        "playerSeasonId":"...","slotId":"gk"}
 
+    POST /account/register
+      {"username":"josip","email":"josip@example.com",
+       "password":"a long passphrase of at least 15 characters"}
+
+    POST /account/login
+      {"identifier":"josip","password":"..."}
+
+    GET /account/me
+    GET /account/history?limit=20&offset=0
+    GET /account/history/{historyId}
+    GET /profiles/{username}
+
+    POST /rooms/{code}/claim
+      {"participantToken":"..."}
+
 The participant token can instead be sent as ``Authorization: Bearer ...`` or
 ``X-Participant-Token``. Every state-changing draft action validates both the
 room version and that manager's turn. Random club-season spins are derived
@@ -38,11 +53,17 @@ If ``data/hnl_draft_catalog.json`` exists, it is loaded at startup. Set
 top-level array or an object containing ``clubSeasons``/``club_seasons``. The
 small embedded catalog is explicitly demonstration-only and is never
 represented as a complete historical HNL database.
+
+Accounts are optional. Account sessions use the ``hnl_session`` HttpOnly
+cookie; authenticated room creators/joiners are linked automatically, while
+``claim`` safely links an existing anonymous participant. Completed seasons
+are snapshotted idempotently so room expiry does not erase account history.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -56,6 +77,7 @@ import unicodedata
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
+from http.cookies import CookieError, SimpleCookie
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -63,13 +85,20 @@ from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib.parse import parse_qs, urlsplit
 
 
-API_VERSION = "2.0.0"
+API_VERSION = "2.1.0"
 CATALOG_SCHEMA_VERSION = "1.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_MAX_BODY_BYTES = 1_000_000
 DEFAULT_ROOM_TTL_SECONDS = 6 * 60 * 60
 MAX_ROOM_TTL_SECONDS = 24 * 60 * 60
+DEFAULT_AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60
+MAX_AUTH_SESSION_SECONDS = 365 * 24 * 60 * 60
+AUTH_COOKIE_NAME = "hnl_session"
+DEFAULT_PASSWORD_SCRYPT_N = 1 << 17
+PASSWORD_SCRYPT_R = 8
+PASSWORD_SCRYPT_P = 1
+PASSWORD_HASH_BYTES = 32
 ROOM_CODE_LENGTH = 6
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ROOM_MODES = {"solo", "live"}
@@ -78,6 +107,12 @@ DIFFICULTY_REROLLS = {"easy": 3, "normal": 1, "hard": 0}
 RATINGS_MODES = {"season", "prime"}
 DRAFT_MODES = {"squad-first", "position-first"}
 CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]{1,22}[A-Za-z0-9])$")
+EMAIL_PATTERN = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+)
 
 
 class RequestError(ValueError):
@@ -124,6 +159,51 @@ def _clean_name(value: Any) -> str:
             "Manager name must contain 1–40 printable characters.",
         )
     return name
+
+
+def _clean_username(value: Any) -> str:
+    if not isinstance(value, str):
+        raise RequestError(400, "invalid_username", "Username must be a string.")
+    username = value.strip()
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise RequestError(
+            400,
+            "invalid_username",
+            "Username must be 3–24 characters, start and end with a letter or "
+            "number, and use only letters, numbers, '.', '_' or '-'.",
+        )
+    return username
+
+
+def _clean_email(value: Any) -> str:
+    if not isinstance(value, str):
+        raise RequestError(400, "invalid_email", "Email must be a string.")
+    email = value.strip().casefold()
+    if len(email) > 254 or not EMAIL_PATTERN.fullmatch(email):
+        raise RequestError(400, "invalid_email", "Enter a valid email address.")
+    return email
+
+
+def _registration_password(value: Any) -> str:
+    if not isinstance(value, str):
+        raise RequestError(400, "invalid_password", "Password must be a string.")
+    if not 15 <= len(value) <= 128:
+        raise RequestError(
+            400,
+            "invalid_password",
+            "Password must be 15–128 characters.",
+        )
+    return value
+
+
+def _login_password(value: Any) -> str:
+    if not isinstance(value, str) or not 1 <= len(value) <= 128:
+        raise RequestError(
+            401,
+            "invalid_credentials",
+            "Username/email or password is incorrect.",
+        )
+    return value
 
 
 def _json_loads(value: str | None, fallback: Any) -> Any:
@@ -1252,15 +1332,46 @@ class RoomStore:
         catalog: Catalog | None = None,
         *,
         room_ttl_seconds: int = DEFAULT_ROOM_TTL_SECONDS,
+        auth_session_seconds: int | None = None,
+        password_scrypt_n: int | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         if not 1 <= room_ttl_seconds <= MAX_ROOM_TTL_SECONDS:
             raise ValueError("room_ttl_seconds is outside the supported range.")
+        if auth_session_seconds is None:
+            auth_session_seconds = int(
+                os.getenv(
+                    "HNL_AUTH_SESSION_SECONDS",
+                    str(DEFAULT_AUTH_SESSION_SECONDS),
+                )
+            )
+        if not 60 <= auth_session_seconds <= MAX_AUTH_SESSION_SECONDS:
+            raise ValueError("auth_session_seconds is outside the supported range.")
+        if password_scrypt_n is None:
+            password_scrypt_n = int(
+                os.getenv(
+                    "HNL_PASSWORD_SCRYPT_N",
+                    str(DEFAULT_PASSWORD_SCRYPT_N),
+                )
+            )
+        if (
+            not 1 << 14 <= password_scrypt_n <= 1 << 18
+            or password_scrypt_n & (password_scrypt_n - 1)
+        ):
+            raise ValueError("password_scrypt_n must be a supported power of two.")
         self.database_path = str(database_path)
         self.catalog = catalog or Catalog.load(os.getenv("HNL_CATALOG_PATH"))
         self.room_ttl_seconds = room_ttl_seconds
+        self.auth_session_seconds = auth_session_seconds
+        self.password_scrypt_n = password_scrypt_n
         self.clock = clock
         self._lock = threading.RLock()
+        self._auth_pepper = os.getenv("HNL_AUTH_PEPPER", "")
+        self._dummy_password_salt = secrets.token_hex(16)
+        self._dummy_password_hash = self._password_digest(
+            "not-a-real-account-password-380",
+            self._dummy_password_salt,
+        )
         if self.database_path != ":memory:":
             Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
@@ -1285,6 +1396,26 @@ class RoomStore:
                     connection.execute("PRAGMA journal_mode = WAL")
                 connection.executescript(
                     """
+                CREATE TABLE IF NOT EXISTS accounts (
+                    id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    password_salt TEXT NOT NULL,
+                    password_n INTEGER NOT NULL DEFAULT 131072,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS auth_sessions (
+                    token_hash TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL
+                        REFERENCES accounts(id) ON DELETE CASCADE,
+                    created_at REAL NOT NULL,
+                    last_seen_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS rooms (
                     code TEXT PRIMARY KEY,
                     mode TEXT NOT NULL,
@@ -1310,6 +1441,8 @@ class RoomStore:
                     rerolls_remaining INTEGER NOT NULL,
                     current_spin_json TEXT,
                     spin_history_json TEXT NOT NULL,
+                    account_id TEXT
+                        REFERENCES accounts(id) ON DELETE SET NULL,
                     joined_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     UNIQUE(room_code, seat)
@@ -1331,11 +1464,59 @@ class RoomStore:
                     UNIQUE(participant_id, player_season_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS season_history (
+                    id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL
+                        REFERENCES accounts(id) ON DELETE CASCADE,
+                    room_code TEXT NOT NULL,
+                    participant_id TEXT NOT NULL,
+                    season_id TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    manager_name TEXT NOT NULL,
+                    formation TEXT NOT NULL,
+                    settings_json TEXT NOT NULL,
+                    picks_json TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    completed_at REAL NOT NULL,
+                    UNIQUE(account_id, room_code, participant_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS auth_sessions_account_idx
+                    ON auth_sessions(account_id, expires_at);
                 CREATE INDEX IF NOT EXISTS participants_room_idx
                     ON participants(room_code, seat);
                 CREATE INDEX IF NOT EXISTS picks_participant_idx
                     ON picks(participant_id, turn_index);
+                CREATE INDEX IF NOT EXISTS season_history_account_idx
+                    ON season_history(account_id, completed_at DESC);
                 """
+                )
+                participant_columns = {
+                    row["name"]
+                    for row in connection.execute(
+                        "PRAGMA table_info(participants)"
+                    ).fetchall()
+                }
+                if "account_id" not in participant_columns:
+                    connection.execute(
+                        "ALTER TABLE participants ADD COLUMN account_id TEXT "
+                        "REFERENCES accounts(id) ON DELETE SET NULL"
+                    )
+                account_columns = {
+                    row["name"]
+                    for row in connection.execute(
+                        "PRAGMA table_info(accounts)"
+                    ).fetchall()
+                }
+                if "password_n" not in account_columns:
+                    connection.execute(
+                        "ALTER TABLE accounts ADD COLUMN password_n INTEGER "
+                        "NOT NULL DEFAULT 131072"
+                    )
+                connection.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS participants_room_account_idx "
+                    "ON participants(room_code, account_id) "
+                    "WHERE account_id IS NOT NULL"
                 )
             finally:
                 connection.close()
@@ -1353,6 +1534,518 @@ class RoomStore:
                 raise
             finally:
                 connection.close()
+
+    def _password_digest(
+        self,
+        password: str,
+        salt_hex: str,
+        *,
+        work_factor: int | None = None,
+    ) -> str:
+        scrypt_n = work_factor or self.password_scrypt_n
+        password_bytes = (
+            password.encode("utf-8")
+            + b"\0"
+            + self._auth_pepper.encode("utf-8")
+        )
+        return hashlib.scrypt(
+            password_bytes,
+            salt=bytes.fromhex(salt_hex),
+            n=scrypt_n,
+            r=PASSWORD_SCRYPT_R,
+            p=PASSWORD_SCRYPT_P,
+            dklen=PASSWORD_HASH_BYTES,
+            maxmem=max(
+                256 * 1024 * 1024,
+                256 * scrypt_n * PASSWORD_SCRYPT_R,
+            ),
+        ).hex()
+
+    def _password_matches(
+        self,
+        password: str,
+        salt_hex: str,
+        expected_hash: str,
+        *,
+        work_factor: int | None = None,
+    ) -> bool:
+        try:
+            actual_hash = self._password_digest(
+                password,
+                salt_hex,
+                work_factor=work_factor,
+            )
+        except (TypeError, ValueError):
+            return False
+        return hmac.compare_digest(actual_hash, expected_hash)
+
+    @staticmethod
+    def _account_payload(
+        account: sqlite3.Row,
+        *,
+        include_email: bool,
+    ) -> dict[str, Any]:
+        payload = {
+            "id": account["id"],
+            "username": account["username"],
+            "createdAt": _utc_timestamp(account["created_at"]),
+        }
+        if include_email:
+            payload["email"] = account["email"]
+        return payload
+
+    @staticmethod
+    def _require_account_row(
+        connection: sqlite3.Connection,
+        account_id: str,
+    ) -> sqlite3.Row:
+        account = connection.execute(
+            "SELECT * FROM accounts WHERE id = ?",
+            (account_id,),
+        ).fetchone()
+        if not account:
+            raise RequestError(
+                401,
+                "authentication_required",
+                "Sign in to continue.",
+            )
+        return account
+
+    def _issue_auth_session(
+        self,
+        connection: sqlite3.Connection,
+        account_id: str,
+    ) -> str:
+        now = self.clock()
+        connection.execute(
+            "DELETE FROM auth_sessions WHERE expires_at <= ?",
+            (now,),
+        )
+        token = secrets.token_urlsafe(32)
+        connection.execute(
+            "INSERT INTO auth_sessions "
+            "(token_hash, account_id, created_at, last_seen_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                _sha256(token),
+                account_id,
+                now,
+                now,
+                now + self.auth_session_seconds,
+            ),
+        )
+        return token
+
+    def register_account(
+        self,
+        payload: Mapping[str, Any],
+    ) -> tuple[dict[str, Any], str]:
+        if not isinstance(payload, Mapping):
+            raise RequestError(400, "invalid_payload", "JSON object required.")
+        username = _clean_username(payload.get("username"))
+        email = _clean_email(payload.get("email"))
+        password = _registration_password(payload.get("password"))
+        salt = secrets.token_hex(16)
+        password_hash = self._password_digest(password, salt)
+        account_id = uuid.uuid4().hex
+        now = self.clock()
+        with self._transaction() as connection:
+            conflict = connection.execute(
+                "SELECT username, email FROM accounts "
+                "WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
+                (username, email),
+            ).fetchone()
+            if conflict:
+                raise RequestError(
+                    409,
+                    "account_exists",
+                    "That username or email cannot be registered.",
+                )
+            try:
+                connection.execute(
+                    "INSERT INTO accounts "
+                    "(id, username, email, password_hash, password_salt, "
+                    "password_n, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        account_id,
+                        username,
+                        email,
+                        password_hash,
+                        salt,
+                        self.password_scrypt_n,
+                        now,
+                        now,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise RequestError(
+                    409,
+                    "account_exists",
+                    "That username or email cannot be registered.",
+                ) from error
+            token = self._issue_auth_session(connection, account_id)
+            account = self._require_account_row(connection, account_id)
+            response = {
+                "account": self._account_payload(account, include_email=True),
+                "stats": self._aggregate_history(connection, account_id),
+            }
+        return response, token
+
+    def login_account(
+        self,
+        payload: Mapping[str, Any],
+    ) -> tuple[dict[str, Any], str]:
+        if not isinstance(payload, Mapping):
+            raise RequestError(400, "invalid_payload", "JSON object required.")
+        identifier_value = payload.get("identifier")
+        password_value = payload.get("password")
+        identifier = (
+            identifier_value.strip()
+            if isinstance(identifier_value, str)
+            else ""
+        )
+        password = _login_password(password_value)
+        account_data: dict[str, Any] | None = None
+        with self._transaction() as connection:
+            account_row = (
+                connection.execute(
+                    "SELECT * FROM accounts "
+                    "WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
+                    (identifier, identifier.casefold()),
+                ).fetchone()
+                if 1 <= len(identifier) <= 254
+                else None
+            )
+            account_data = dict(account_row) if account_row else None
+
+        if account_data:
+            password_valid = self._password_matches(
+                password,
+                account_data["password_salt"],
+                account_data["password_hash"],
+                work_factor=int(account_data["password_n"]),
+            )
+        else:
+            # Keep an unknown-account failure in the same expensive scrypt
+            # work class as a wrong password for an existing account.
+            password_valid = self._password_matches(
+                password,
+                self._dummy_password_salt,
+                self._dummy_password_hash,
+            )
+        if not account_data or not password_valid:
+            raise RequestError(
+                401,
+                "invalid_credentials",
+                "Username/email or password is incorrect.",
+            )
+
+        upgraded_salt: str | None = None
+        upgraded_hash: str | None = None
+        if int(account_data["password_n"]) < self.password_scrypt_n:
+            upgraded_salt = secrets.token_hex(16)
+            upgraded_hash = self._password_digest(
+                password,
+                upgraded_salt,
+            )
+
+        with self._transaction() as connection:
+            account = self._require_account_row(
+                connection,
+                account_data["id"],
+            )
+            if upgraded_salt and upgraded_hash:
+                connection.execute(
+                    "UPDATE accounts SET password_hash = ?, password_salt = ?, "
+                    "password_n = ?, updated_at = ? "
+                    "WHERE id = ? AND password_n < ?",
+                    (
+                        upgraded_hash,
+                        upgraded_salt,
+                        self.password_scrypt_n,
+                        self.clock(),
+                        account["id"],
+                        self.password_scrypt_n,
+                    ),
+                )
+            token = self._issue_auth_session(connection, account["id"])
+            response = {
+                "account": self._account_payload(account, include_email=True),
+                "stats": self._aggregate_history(connection, account["id"]),
+            }
+        return response, token
+
+    def account_from_session(
+        self,
+        token: str | None,
+        *,
+        required: bool,
+    ) -> dict[str, Any] | None:
+        account: sqlite3.Row | None = None
+        with self._transaction() as connection:
+            now = self.clock()
+            connection.execute(
+                "DELETE FROM auth_sessions WHERE expires_at <= ?",
+                (now,),
+            )
+            if isinstance(token, str) and len(token) >= 20:
+                account = connection.execute(
+                    "SELECT accounts.* FROM auth_sessions "
+                    "JOIN accounts ON accounts.id = auth_sessions.account_id "
+                    "WHERE auth_sessions.token_hash = ? "
+                    "AND auth_sessions.expires_at > ?",
+                    (_sha256(token), now),
+                ).fetchone()
+                if account:
+                    connection.execute(
+                        "UPDATE auth_sessions SET last_seen_at = ? "
+                        "WHERE token_hash = ?",
+                        (now, _sha256(token)),
+                    )
+            if required and not account:
+                raise RequestError(
+                    401,
+                    "authentication_required",
+                    "Sign in to continue.",
+                )
+            return dict(account) if account else None
+
+    def logout_account(self, token: str | None) -> dict[str, bool]:
+        with self._transaction() as connection:
+            if isinstance(token, str) and token:
+                connection.execute(
+                    "DELETE FROM auth_sessions WHERE token_hash = ?",
+                    (_sha256(token),),
+                )
+        return {"ok": True}
+
+    @staticmethod
+    def _history_summary(
+        row: sqlite3.Row,
+        *,
+        include_private: bool,
+    ) -> dict[str, Any]:
+        result = _json_loads(row["result_json"], {})
+        played = int(result.get("played") or 0)
+        wins = int(result.get("wins") or 0)
+        summary = {
+            "id": row["id"],
+            "seasonId": row["season_id"],
+            "mode": row["mode"],
+            "managerName": row["manager_name"],
+            "formation": row["formation"],
+            "completedAt": _utc_timestamp(row["completed_at"]),
+            "finalPosition": result.get("finalPosition"),
+            "played": played,
+            "points": int(result.get("points") or 0),
+            "wins": wins,
+            "draws": int(result.get("draws") or 0),
+            "losses": int(result.get("losses") or 0),
+            "goalsFor": int(result.get("goalsFor") or 0),
+            "goalsAgainst": int(result.get("goalsAgainst") or 0),
+            "goalDifference": int(result.get("goalDifference") or 0),
+            "averageRating": result.get("averageRating"),
+            "titleWon": result.get("finalPosition") == 1,
+            "perfectSeason": played > 0 and wins == played,
+            "invincibleSeason": played > 0
+            and int(result.get("losses") or 0) == 0,
+        }
+        if include_private:
+            summary["roomCode"] = row["room_code"]
+        return summary
+
+    @classmethod
+    def _aggregate_history(
+        cls,
+        connection: sqlite3.Connection,
+        account_id: str,
+    ) -> dict[str, Any]:
+        rows = connection.execute(
+            "SELECT * FROM season_history WHERE account_id = ?",
+            (account_id,),
+        ).fetchall()
+        summaries = [
+            cls._history_summary(row, include_private=False)
+            for row in rows
+        ]
+        seasons = len(summaries)
+        total_played = sum(item["played"] for item in summaries)
+        total_wins = sum(item["wins"] for item in summaries)
+        positions = [
+            int(item["finalPosition"])
+            for item in summaries
+            if isinstance(item["finalPosition"], int)
+        ]
+        points = [item["points"] for item in summaries]
+        goals_for = sum(item["goalsFor"] for item in summaries)
+        goals_against = sum(item["goalsAgainst"] for item in summaries)
+        return {
+            "seasonsPlayed": seasons,
+            "titles": sum(item["titleWon"] for item in summaries),
+            "wins": total_wins,
+            "draws": sum(item["draws"] for item in summaries),
+            "losses": sum(item["losses"] for item in summaries),
+            "points": sum(points),
+            "goalsFor": goals_for,
+            "goalsAgainst": goals_against,
+            "goalDifference": goals_for - goals_against,
+            "averagePoints": round(sum(points) / seasons, 2) if seasons else 0,
+            "bestPoints": max(points) if points else 0,
+            "bestFinish": min(positions) if positions else None,
+            "averageFinish": (
+                round(sum(positions) / len(positions), 2)
+                if positions
+                else None
+            ),
+            "winRate": (
+                round(total_wins / total_played, 4)
+                if total_played
+                else 0
+            ),
+            "perfectSeasons": sum(
+                item["perfectSeason"] for item in summaries
+            ),
+            "invincibleSeasons": sum(
+                item["invincibleSeason"] for item in summaries
+            ),
+        }
+
+    def account_me(self, token: str | None) -> dict[str, Any]:
+        account_data = self.account_from_session(token, required=True)
+        assert account_data is not None
+        with self._transaction() as connection:
+            account = self._require_account_row(
+                connection,
+                account_data["id"],
+            )
+            return {
+                "account": self._account_payload(account, include_email=True),
+                "stats": self._aggregate_history(connection, account["id"]),
+            }
+
+    def account_history(
+        self,
+        token: str | None,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        if not _is_int(limit) or not 1 <= limit <= 100:
+            raise RequestError(
+                400,
+                "invalid_limit",
+                "limit must be an integer from 1 to 100.",
+            )
+        if not _is_int(offset) or not 0 <= offset <= 100_000:
+            raise RequestError(
+                400,
+                "invalid_offset",
+                "offset must be a non-negative integer.",
+            )
+        account_data = self.account_from_session(token, required=True)
+        assert account_data is not None
+        with self._transaction() as connection:
+            total = connection.execute(
+                "SELECT COUNT(*) AS count FROM season_history "
+                "WHERE account_id = ?",
+                (account_data["id"],),
+            ).fetchone()["count"]
+            rows = connection.execute(
+                "SELECT * FROM season_history WHERE account_id = ? "
+                "ORDER BY completed_at DESC, id DESC LIMIT ? OFFSET ?",
+                (account_data["id"], limit, offset),
+            ).fetchall()
+            return {
+                "seasons": [
+                    self._history_summary(row, include_private=True)
+                    for row in rows
+                ],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "stats": self._aggregate_history(
+                    connection,
+                    account_data["id"],
+                ),
+            }
+
+    def account_history_detail(
+        self,
+        token: str | None,
+        history_id: str,
+    ) -> dict[str, Any]:
+        account_data = self.account_from_session(token, required=True)
+        assert account_data is not None
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM season_history "
+                "WHERE id = ? AND account_id = ?",
+                (history_id, account_data["id"]),
+            ).fetchone()
+            if not row:
+                raise RequestError(
+                    404,
+                    "season_not_found",
+                    "Season history entry was not found.",
+                )
+            return {
+                "season": {
+                    "id": row["id"],
+                    "roomCode": row["room_code"],
+                    "seasonId": row["season_id"],
+                    "mode": row["mode"],
+                    "managerName": row["manager_name"],
+                    "formation": row["formation"],
+                    "completedAt": _utc_timestamp(row["completed_at"]),
+                    "settings": _json_loads(row["settings_json"], {}),
+                    "picks": _json_loads(row["picks_json"], []),
+                    "result": _json_loads(row["result_json"], {}),
+                }
+            }
+
+    def public_profile(self, username: str) -> dict[str, Any]:
+        try:
+            normalized = _clean_username(username)
+        except RequestError as error:
+            raise RequestError(
+                404,
+                "profile_not_found",
+                "Profile was not found.",
+            ) from error
+        with self._transaction() as connection:
+            account = connection.execute(
+                "SELECT * FROM accounts WHERE username = ? COLLATE NOCASE",
+                (normalized,),
+            ).fetchone()
+            if not account:
+                raise RequestError(
+                    404,
+                    "profile_not_found",
+                    "Profile was not found.",
+                )
+            rows = connection.execute(
+                "SELECT * FROM season_history WHERE account_id = ? "
+                "ORDER BY completed_at DESC, id DESC LIMIT 10",
+                (account["id"],),
+            ).fetchall()
+            return {
+                "profile": {
+                    "username": account["username"],
+                    "createdAt": _utc_timestamp(account["created_at"]),
+                    "stats": self._aggregate_history(
+                        connection,
+                        account["id"],
+                    ),
+                    "recentSeasons": [
+                        self._history_summary(
+                            row,
+                            include_private=False,
+                        )
+                        for row in rows
+                    ],
+                }
+            }
 
     def _new_code(self, connection: sqlite3.Connection) -> str:
         for _ in range(100):
@@ -2562,6 +3255,47 @@ class RoomStore:
             ],
         }
 
+    def _snapshot_completed_history(
+        self,
+        connection: sqlite3.Connection,
+        room: sqlite3.Row,
+        participant: sqlite3.Row,
+        settings: Mapping[str, Any],
+        picks: list[dict[str, Any]],
+        result: Mapping[str, Any] | None,
+    ) -> None:
+        account_id = participant["account_id"]
+        if not account_id or not result:
+            return
+        season_id = str(result.get("seasonId") or "")
+        if not season_id:
+            return
+        history_id = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "hnl-season-history:"
+            f"{account_id}:{room['code']}:{participant['id']}",
+        ).hex
+        connection.execute(
+            "INSERT OR IGNORE INTO season_history "
+            "(id, account_id, room_code, participant_id, season_id, mode, "
+            "manager_name, formation, settings_json, picks_json, result_json, "
+            "completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                history_id,
+                account_id,
+                room["code"],
+                participant["id"],
+                season_id,
+                room["mode"],
+                participant["name"],
+                str(settings.get("formation") or ""),
+                _canonical_json(settings),
+                _canonical_json(picks),
+                _canonical_json(result),
+                self.clock(),
+            ),
+        )
+
     def _room_view(
         self,
         connection: sqlite3.Connection,
@@ -2679,6 +3413,15 @@ class RoomStore:
                     ),
                 }
             )
+            if room_complete:
+                self._snapshot_completed_history(
+                    connection,
+                    room,
+                    row,
+                    settings,
+                    picks,
+                    result,
+                )
         leaderboard = None
         if room_complete:
             leaderboard = sorted(
@@ -2730,7 +3473,12 @@ class RoomStore:
             "expiresAt": _utc_timestamp(room["expires_at"]),
         }
 
-    def create_room(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def create_room(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        account_id: str | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(payload, Mapping):
             raise RequestError(400, "invalid_payload", "JSON object required.")
         mode = payload.get("mode", "solo")
@@ -2747,6 +3495,8 @@ class RoomStore:
         participant_id = uuid.uuid4().hex
         now = self.clock()
         with self._transaction() as connection:
+            if account_id:
+                self._require_account_row(connection, account_id)
             code = self._new_code(connection)
             connection.execute(
                 "INSERT INTO rooms "
@@ -2768,14 +3518,15 @@ class RoomStore:
                 "INSERT INTO participants "
                 "(id, room_code, name, token_hash, seat, status, turn_index, "
                 "spin_count, rerolls_remaining, current_spin_json, "
-                "spin_history_json, joined_at, updated_at) "
-                "VALUES (?, ?, ?, ?, 1, 'lobby', 0, 0, ?, NULL, '[]', ?, ?)",
+                "spin_history_json, account_id, joined_at, updated_at) "
+                "VALUES (?, ?, ?, ?, 1, 'lobby', 0, 0, ?, NULL, '[]', ?, ?, ?)",
                 (
                     participant_id,
                     code,
                     name,
                     _sha256(token),
                     settings["rerolls"],
+                    account_id,
                     now,
                     now,
                 ),
@@ -2795,7 +3546,13 @@ class RoomStore:
             "room": view,
         }
 
-    def join_room(self, code: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def join_room(
+        self,
+        code: str,
+        payload: Mapping[str, Any],
+        *,
+        account_id: str | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(payload, Mapping):
             raise RequestError(400, "invalid_payload", "JSON object required.")
         name = _clean_name(payload.get("name"))
@@ -2803,6 +3560,8 @@ class RoomStore:
         participant_id = uuid.uuid4().hex
         now = self.clock()
         with self._transaction() as connection:
+            if account_id:
+                self._require_account_row(connection, account_id)
             room = self._room_row(connection, code, mutation=True)
             if room["mode"] != "live":
                 raise RequestError(
@@ -2823,6 +3582,14 @@ class RoomStore:
             ).fetchall()
             if len(participants) >= settings["maxPlayers"]:
                 raise RequestError(409, "room_full", "This room is full.")
+            if account_id and any(
+                item["account_id"] == account_id for item in participants
+            ):
+                raise RequestError(
+                    409,
+                    "account_already_joined",
+                    "This account already manages a team in the room.",
+                )
             if any(item["name"].casefold() == name.casefold() for item in participants):
                 raise RequestError(
                     409,
@@ -2834,8 +3601,8 @@ class RoomStore:
                 "INSERT INTO participants "
                 "(id, room_code, name, token_hash, seat, status, turn_index, "
                 "spin_count, rerolls_remaining, current_spin_json, "
-                "spin_history_json, joined_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, 'lobby', 0, 0, ?, NULL, '[]', ?, ?)",
+                "spin_history_json, account_id, joined_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 'lobby', 0, 0, ?, NULL, '[]', ?, ?, ?)",
                 (
                     participant_id,
                     room["code"],
@@ -2843,6 +3610,7 @@ class RoomStore:
                     _sha256(token),
                     seat,
                     settings["rerolls"],
+                    account_id,
                     now,
                     now,
                 ),
@@ -2859,6 +3627,60 @@ class RoomStore:
             "participantToken": token,
             "room": view,
         }
+
+    def claim_room_participant(
+        self,
+        code: str,
+        participant_token: str,
+        account_id: str,
+    ) -> dict[str, Any]:
+        with self._transaction() as connection:
+            self._require_account_row(connection, account_id)
+            room = self._room_row(connection, code, mutation=False)
+            participant = self._participant_by_token(
+                connection,
+                room["code"],
+                participant_token,
+            )
+            existing_account_id = participant["account_id"]
+            if existing_account_id and existing_account_id != account_id:
+                raise RequestError(
+                    409,
+                    "participant_already_claimed",
+                    "This team already belongs to another account.",
+                )
+            if not existing_account_id:
+                other = connection.execute(
+                    "SELECT 1 FROM participants "
+                    "WHERE room_code = ? AND account_id = ? AND id != ?",
+                    (room["code"], account_id, participant["id"]),
+                ).fetchone()
+                if other:
+                    raise RequestError(
+                        409,
+                        "account_already_joined",
+                        "This account already manages a team in the room.",
+                    )
+                connection.execute(
+                    "UPDATE participants SET account_id = ?, updated_at = ? "
+                    "WHERE id = ? AND account_id IS NULL",
+                    (account_id, self.clock(), participant["id"]),
+                )
+                participant = connection.execute(
+                    "SELECT * FROM participants WHERE id = ?",
+                    (participant["id"],),
+                ).fetchone()
+            view = self._room_view(connection, room, participant)
+            return {
+                "claimed": True,
+                "participantId": participant["id"],
+                "room": view,
+                # `_room_view` snapshots a completed season before returning.
+                # Compute the aggregate afterwards so an account claiming an
+                # already-completed anonymous room receives the same fresh
+                # totals as the history and public-profile endpoints.
+                "stats": self._aggregate_history(connection, account_id),
+            }
 
     def get_room(self, code: str, token: str | None = None) -> dict[str, Any]:
         with self._transaction() as connection:
@@ -3425,6 +4247,7 @@ class RoomsAPIHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             if origin != "*":
                 self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header(
             "Access-Control-Allow-Headers",
             "Authorization, Content-Type, X-Participant-Token",
@@ -3466,6 +4289,92 @@ class RoomsAPIHandler(BaseHTTPRequestHandler):
             value = payload.get("participantToken")
             return value if isinstance(value, str) else None
         return None
+
+    def _account_session_token(self) -> str | None:
+        raw_cookie = self.headers.get("Cookie")
+        if not raw_cookie:
+            return None
+        cookie = SimpleCookie()
+        try:
+            cookie.load(raw_cookie)
+        except CookieError:
+            return None
+        morsel = cookie.get(AUTH_COOKIE_NAME)
+        return morsel.value if morsel else None
+
+    def _account(self, *, required: bool) -> dict[str, Any] | None:
+        return self.store.account_from_session(
+            self._account_session_token(),
+            required=required,
+        )
+
+    def _auth_cookie(self, token: str, *, clear: bool = False) -> str:
+        if clear:
+            return (
+                f"{AUTH_COOKIE_NAME}=; Path=/; Max-Age=0; "
+                "Expires=Thu, 01 Jan 1970 00:00:00 GMT; "
+                "HttpOnly; SameSite=Lax"
+                + (
+                    "; Secure"
+                    if os.getenv("HNL_SECURE_COOKIES", "").lower()
+                    in {"1", "true", "yes"}
+                    else ""
+                )
+            )
+        cookie = (
+            f"{AUTH_COOKIE_NAME}={token}; Path=/; "
+            f"Max-Age={self.store.auth_session_seconds}; "
+            "HttpOnly; SameSite=Lax"
+        )
+        if os.getenv("HNL_SECURE_COOKIES", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            cookie += "; Secure"
+        return cookie
+
+    def _client_ip(self) -> str:
+        if os.getenv("HNL_TRUST_PROXY", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            cloudflare_ip = self.headers.get("CF-Connecting-IP", "").strip()
+            if cloudflare_ip:
+                return cloudflare_ip
+            forwarded_for = self.headers.get("X-Forwarded-For", "")
+            if forwarded_for:
+                return forwarded_for.split(",", 1)[0].strip()
+        return str(self.client_address[0])
+
+    def _enforce_auth_rate_limit(self, action: str) -> None:
+        retry_after = self.server.consume_auth_attempt(  # type: ignore[attr-defined]
+            f"{action}:{self._client_ip()}"
+        )
+        if retry_after is not None:
+            raise RequestError(
+                429,
+                "auth_rate_limited",
+                "Too many account attempts. Try again later.",
+                {"retryAfterSeconds": retry_after},
+            )
+
+    @staticmethod
+    def _query_integer(
+        query: Mapping[str, list[str]],
+        name: str,
+        default: int,
+    ) -> int:
+        value = query.get(name, [str(default)])[0]
+        try:
+            return int(value)
+        except (TypeError, ValueError) as error:
+            raise RequestError(
+                400,
+                f"invalid_{name}",
+                f"{name} must be an integer.",
+            ) from error
 
     def _read_payload(self) -> dict[str, Any]:
         raw_length = self.headers.get("Content-Length")
@@ -3519,6 +4428,35 @@ class RoomsAPIHandler(BaseHTTPRequestHandler):
                     self.store.catalog.public_inventory(include_players),
                 )
                 return
+            if parts == ["account", "me"]:
+                self._send(
+                    200,
+                    self.store.account_me(self._account_session_token()),
+                )
+                return
+            if parts == ["account", "history"]:
+                query = parse_qs(parsed.query)
+                self._send(
+                    200,
+                    self.store.account_history(
+                        self._account_session_token(),
+                        limit=self._query_integer(query, "limit", 20),
+                        offset=self._query_integer(query, "offset", 0),
+                    ),
+                )
+                return
+            if len(parts) == 3 and parts[:2] == ["account", "history"]:
+                self._send(
+                    200,
+                    self.store.account_history_detail(
+                        self._account_session_token(),
+                        parts[2],
+                    ),
+                )
+                return
+            if len(parts) == 2 and parts[0] == "profiles":
+                self._send(200, self.store.public_profile(parts[1]))
+                return
             if len(parts) == 2 and parts[0] == "rooms":
                 query = parse_qs(parsed.query)
                 token = self._token() or query.get("token", [None])[0]
@@ -3539,21 +4477,76 @@ class RoomsAPIHandler(BaseHTTPRequestHandler):
             parsed = urlsplit(self.path)
             parts = self._route_parts(parsed.path)
             payload = self._read_payload()
-            if parts == ["rooms"]:
+            if parts == ["account", "register"]:
+                self._enforce_auth_rate_limit("register")
+                response, session_token = self.store.register_account(payload)
                 self._send(
                     HTTPStatus.CREATED,
-                    self.store.create_room(payload),
+                    response,
+                    extra_headers={
+                        "Set-Cookie": self._auth_cookie(session_token),
+                    },
+                )
+                return
+            if parts == ["account", "login"]:
+                self._enforce_auth_rate_limit("login")
+                response, session_token = self.store.login_account(payload)
+                self._send(
+                    200,
+                    response,
+                    extra_headers={
+                        "Set-Cookie": self._auth_cookie(session_token),
+                    },
+                )
+                return
+            if parts == ["account", "logout"]:
+                response = self.store.logout_account(
+                    self._account_session_token()
+                )
+                self._send(
+                    200,
+                    response,
+                    extra_headers={
+                        "Set-Cookie": self._auth_cookie("", clear=True),
+                    },
+                )
+                return
+            if parts == ["rooms"]:
+                account = self._account(required=False)
+                self._send(
+                    HTTPStatus.CREATED,
+                    self.store.create_room(
+                        payload,
+                        account_id=account["id"] if account else None,
+                    ),
                 )
                 return
             if len(parts) == 3 and parts[0] == "rooms":
                 code, action = parts[1], parts[2]
                 if action == "join":
+                    account = self._account(required=False)
                     self._send(
                         HTTPStatus.CREATED,
-                        self.store.join_room(code, payload),
+                        self.store.join_room(
+                            code,
+                            payload,
+                            account_id=account["id"] if account else None,
+                        ),
                     )
                     return
                 token = self._token(payload)
+                if action == "claim":
+                    account = self._account(required=True)
+                    assert account is not None
+                    self._send(
+                        200,
+                        self.store.claim_room_participant(
+                            code,
+                            token or "",
+                            account["id"],
+                        ),
+                    )
+                    return
                 if action == "start":
                     self._send(
                         200,
@@ -3628,7 +4621,44 @@ class RoomsHTTPServer(ThreadingHTTPServer):
         room_store: RoomStore,
     ) -> None:
         self.room_store = room_store
+        self._auth_rate_lock = threading.Lock()
+        self._auth_rate_attempts: dict[str, list[float]] = {}
         super().__init__(server_address, RoomsAPIHandler)
+
+    def consume_auth_attempt(self, key: str) -> int | None:
+        try:
+            maximum = int(os.getenv("HNL_AUTH_RATE_LIMIT_ATTEMPTS", "10"))
+            window = int(
+                os.getenv("HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS", "300")
+            )
+        except ValueError:
+            maximum, window = 10, 300
+        maximum = max(1, min(maximum, 1_000))
+        window = max(1, min(window, 86_400))
+        now = time.monotonic()
+        with self._auth_rate_lock:
+            recent = [
+                timestamp
+                for timestamp in self._auth_rate_attempts.get(key, [])
+                if now - timestamp < window
+            ]
+            if len(recent) >= maximum:
+                self._auth_rate_attempts[key] = recent
+                return max(1, math.ceil(window - (now - recent[0])))
+            recent.append(now)
+            self._auth_rate_attempts[key] = recent
+            if len(self._auth_rate_attempts) > 10_000:
+                cutoff = now - window
+                self._auth_rate_attempts = {
+                    item_key: [
+                        timestamp
+                        for timestamp in timestamps
+                        if timestamp > cutoff
+                    ]
+                    for item_key, timestamps in self._auth_rate_attempts.items()
+                    if any(timestamp > cutoff for timestamp in timestamps)
+                }
+            return None
 
 
 def make_server(

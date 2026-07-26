@@ -270,6 +270,97 @@ type RoomAuthResponse = {
   room: Room;
 };
 
+type AccountStats = {
+  seasonsPlayed: number;
+  titles: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  averagePoints?: number | null;
+  bestPoints?: number | null;
+  bestFinish?: number | null;
+  averageFinish?: number | null;
+  winRate?: number | null;
+  perfectSeasons?: number;
+  invincibleSeasons?: number;
+};
+
+type Account = {
+  id: string;
+  username: string;
+  email?: string | null;
+  displayName?: string | null;
+  createdAt?: string | null;
+  stats?: Partial<AccountStats> | null;
+};
+
+type SeasonHistoryEntry = {
+  id: string;
+  roomCode?: string | null;
+  seasonId?: string | null;
+  mode?: GameMode | null;
+  managerName?: string | null;
+  formation?: string | null;
+  difficulty?: Difficulty | null;
+  ratingsMode?: RatingsMode | null;
+  completedAt?: string | null;
+  createdAt?: string | null;
+  finalPosition?: number | null;
+  points?: number | null;
+  wins?: number | null;
+  draws?: number | null;
+  losses?: number | null;
+  goalsFor?: number | null;
+  goalsAgainst?: number | null;
+  goalDifference?: number | null;
+  averageRating?: number | null;
+  titleWon?: boolean;
+  perfectSeason?: boolean;
+  picks?: Pick[] | null;
+  settings?: Partial<RoomSettings> | null;
+  result?: SeasonResult | null;
+};
+
+type AccountHistory = {
+  account?: Account | null;
+  stats: AccountStats;
+  seasons: SeasonHistoryEntry[];
+};
+
+type AccountResponse = {
+  account?: Account | null;
+  user?: Account | null;
+  stats?: Partial<AccountStats> | null;
+};
+
+type HistoryResponse = {
+  account?: Account | null;
+  stats?: Partial<AccountStats> | null;
+  seasons?: SeasonHistoryEntry[] | null;
+  history?: SeasonHistoryEntry[] | null;
+  items?: SeasonHistoryEntry[] | null;
+  total?: number;
+  limit?: number;
+  offset?: number;
+};
+
+type HistoryDetailResponse = {
+  season?: SeasonHistoryEntry | null;
+};
+
+type PublicProfileResponse = {
+  profile?: {
+    username: string;
+    createdAt?: string | null;
+    stats?: Partial<AccountStats> | null;
+    recentSeasons?: SeasonHistoryEntry[] | null;
+  } | null;
+};
+
 type CatalogInventory = {
   metadata?: {
     clubSeasonCount?: number;
@@ -304,6 +395,14 @@ type SpinAnimation = {
 
 type SeasonPhase = "preview" | "running" | "final";
 type SimulationSpeed = "normal" | "fast";
+type AccountDialogMode = "login" | "register";
+
+type AccountFormState = {
+  identifier: string;
+  username: string;
+  email: string;
+  password: string;
+};
 
 type SetupState = {
   formation: string;
@@ -317,7 +416,7 @@ type SetupState = {
 };
 
 const API_BASE = (
-  process.env.NEXT_PUBLIC_SIM_API_URL ?? "http://127.0.0.1:8002"
+  process.env.NEXT_PUBLIC_SIM_API_URL ?? "http://localhost:8002"
 ).replace(/\/$/, "");
 
 const FORMATIONS = [
@@ -610,6 +709,7 @@ async function apiRequest<T>(
       ...options,
       headers,
       cache: "no-store",
+      credentials: "include",
     });
   } catch {
     throw new ApiError(
@@ -634,6 +734,156 @@ function formatNumber(value: number | undefined, fallback: string) {
   return typeof value === "number"
     ? new Intl.NumberFormat("hr-HR").format(value)
     : fallback;
+}
+
+const EMPTY_ACCOUNT_STATS: AccountStats = {
+  seasonsPlayed: 0,
+  titles: 0,
+  wins: 0,
+  draws: 0,
+  losses: 0,
+  points: 0,
+  goalsFor: 0,
+  goalsAgainst: 0,
+  goalDifference: 0,
+  averagePoints: 0,
+  bestPoints: 0,
+  bestFinish: null,
+  averageFinish: null,
+  winRate: 0,
+  perfectSeasons: 0,
+  invincibleSeasons: 0,
+};
+
+function accountFromResponse(payload: AccountResponse | Account) {
+  const wrapped = payload as AccountResponse;
+  const candidate = wrapped.account ?? wrapped.user ?? (payload as Account);
+  return candidate?.username ? candidate : null;
+}
+
+function historyResult(entry: SeasonHistoryEntry) {
+  return entry.result ?? null;
+}
+
+function historyNumber(
+  entry: SeasonHistoryEntry,
+  field:
+    | "wins"
+    | "draws"
+    | "losses"
+    | "points"
+    | "goalsFor"
+    | "goalsAgainst"
+    | "goalDifference"
+    | "finalPosition",
+) {
+  const direct = entry[field];
+  if (typeof direct === "number") return direct;
+  const nested = historyResult(entry)?.[field];
+  return typeof nested === "number" ? nested : 0;
+}
+
+function computedAccountStats(seasons: SeasonHistoryEntry[]): AccountStats {
+  const finishes = seasons
+    .map((season) => historyNumber(season, "finalPosition"))
+    .filter((position) => position > 0);
+  const wins = seasons.reduce(
+    (total, season) => total + historyNumber(season, "wins"),
+    0,
+  );
+  const draws = seasons.reduce(
+    (total, season) => total + historyNumber(season, "draws"),
+    0,
+  );
+  const losses = seasons.reduce(
+    (total, season) => total + historyNumber(season, "losses"),
+    0,
+  );
+  const played = wins + draws + losses;
+  const goalsFor = seasons.reduce(
+    (total, season) => total + historyNumber(season, "goalsFor"),
+    0,
+  );
+  const goalsAgainst = seasons.reduce(
+    (total, season) => total + historyNumber(season, "goalsAgainst"),
+    0,
+  );
+  return {
+    seasonsPlayed: seasons.length,
+    titles: seasons.filter(
+      (season) =>
+        season.titleWon ||
+        historyNumber(season, "finalPosition") === 1 ||
+        historyResult(season)?.awards?.leagueTitle === true,
+    ).length,
+    wins,
+    draws,
+    losses,
+    points: seasons.reduce(
+      (total, season) => total + historyNumber(season, "points"),
+      0,
+    ),
+    goalsFor,
+    goalsAgainst,
+    goalDifference: goalsFor - goalsAgainst,
+    averagePoints: seasons.length
+      ? seasons.reduce(
+          (total, season) => total + historyNumber(season, "points"),
+          0,
+        ) / seasons.length
+      : 0,
+    bestPoints: seasons.length
+      ? Math.max(...seasons.map((season) => historyNumber(season, "points")))
+      : 0,
+    bestFinish: finishes.length ? Math.min(...finishes) : null,
+    averageFinish: finishes.length
+      ? finishes.reduce((total, position) => total + position, 0) /
+        finishes.length
+      : null,
+    winRate: played ? wins / played : 0,
+    perfectSeasons: seasons.filter(
+      (season) =>
+        season.perfectSeason ||
+        historyResult(season)?.awards?.perfectSeason ||
+        (historyNumber(season, "wins") > 0 &&
+          historyNumber(season, "draws") === 0 &&
+          historyNumber(season, "losses") === 0),
+    ).length,
+    invincibleSeasons: seasons.filter(
+      (season) =>
+        (historyNumber(season, "wins") + historyNumber(season, "draws") > 0 &&
+          historyNumber(season, "losses") === 0) ||
+        historyResult(season)?.awards?.invincible,
+    ).length,
+  };
+}
+
+function normalizeHistory(
+  payload: HistoryResponse,
+  fallbackAccount?: Account | null,
+): AccountHistory {
+  const seasons = payload.seasons ?? payload.history ?? payload.items ?? [];
+  const computed = computedAccountStats(seasons);
+  return {
+    account: payload.account ?? fallbackAccount ?? null,
+    seasons,
+    stats: {
+      ...EMPTY_ACCOUNT_STATS,
+      ...computed,
+      ...(payload.stats ?? {}),
+    },
+  };
+}
+
+function formatHistoryDate(value?: string | null) {
+  if (!value) return "Datum nije zabilježen";
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat("hr-HR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function managerInitials(name: string) {
@@ -914,12 +1164,18 @@ function isManagerFixture(
 function Header({
   stage,
   room,
+  account,
   onHome,
+  onAccount,
 }: {
   stage: string;
   room?: Room | null;
+  account?: Account | null;
   onHome: () => void;
+  onAccount: () => void;
 }) {
+  const accountLabel =
+    account?.displayName?.trim() || account?.username || "Prijava";
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} aria-label="36–0 HNL naslovnica">
@@ -933,17 +1189,193 @@ function Header({
         <span className="pulse-dot" aria-hidden="true" />
         {stage}
       </div>
-      <div className="header-room">
-        {room ? (
-          <>
-            <span>Soba</span>
-            <strong>{room.code}</strong>
-          </>
-        ) : (
-          <span className="fan-made">Nezavisni fan projekt</span>
-        )}
+      <div className="header-actions">
+        <div className="header-room">
+          {room ? (
+            <>
+              <span>Soba</span>
+              <strong>{room.code}</strong>
+            </>
+          ) : (
+            <span className="fan-made">Nezavisni fan projekt</span>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`account-trigger${account ? " signed-in" : ""}`}
+          onClick={onAccount}
+          aria-label={
+            account
+              ? `Otvori profil korisnika ${accountLabel}`
+              : "Prijava ili izrada računa"
+          }
+        >
+          <span aria-hidden="true">
+            {account ? managerInitials(accountLabel) : "◎"}
+          </span>
+          <strong>{account ? accountLabel : "Prijava"}</strong>
+        </button>
       </div>
     </header>
+  );
+}
+
+function AccountDialog({
+  mode,
+  form,
+  busy,
+  error,
+  onMode,
+  onChange,
+  onSubmit,
+  onClose,
+}: {
+  mode: AccountDialogMode;
+  form: AccountFormState;
+  busy: boolean;
+  error: string;
+  onMode: (mode: AccountDialogMode) => void;
+  onChange: (field: keyof AccountFormState, value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  const registering = mode === "register";
+  return (
+    <div
+      className="account-modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <section
+        className="account-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-dialog-title"
+      >
+        <button
+          type="button"
+          className="account-modal-close"
+          onClick={onClose}
+          aria-label="Zatvori prozor za prijavu"
+        >
+          ×
+        </button>
+        <p className="eyebrow">TVOJ 36–0 PROFIL</p>
+        <h2 id="account-dialog-title">
+          {registering ? "Sačuvaj svoju povijest." : "Dobrodošao natrag."}
+        </h2>
+        <p className="account-modal-lead">
+          {registering
+            ? "Svaka sezona koju završiš dok si prijavljen ulazi u tvoju statistiku."
+            : "Prijavi se za pregled svih svojih momčadi, rezultata i rekorda."}
+        </p>
+        <div className="account-mode-tabs" role="tablist" aria-label="Vrsta prijave">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!registering}
+            className={!registering ? "active" : ""}
+            onClick={() => onMode("login")}
+          >
+            Prijava
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={registering}
+            className={registering ? "active" : ""}
+            onClick={() => onMode("register")}
+          >
+            Novi račun
+          </button>
+        </div>
+        <form className="account-form" onSubmit={onSubmit}>
+          {registering ? (
+            <>
+              <label htmlFor="account-username">
+                Korisničko ime
+                <input
+                  id="account-username"
+                  value={form.username}
+                  onChange={(event) => onChange("username", event.target.value)}
+                  minLength={3}
+                  maxLength={24}
+                  pattern="[A-Za-z0-9](?:[A-Za-z0-9_.-]{1,22}[A-Za-z0-9])?"
+                  autoComplete="username"
+                  placeholder="npr. maestro10"
+                  required
+                  autoFocus
+                />
+                <small>
+                  3–24 znaka · počni i završi slovom ili brojem
+                </small>
+              </label>
+              <label htmlFor="account-email">
+                E-mail
+                <input
+                  id="account-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => onChange("email", event.target.value)}
+                  autoComplete="email"
+                  placeholder="ti@primjer.hr"
+                  required
+                />
+              </label>
+            </>
+          ) : (
+            <label htmlFor="account-identifier">
+              Korisničko ime ili e-mail
+              <input
+                id="account-identifier"
+                value={form.identifier}
+                onChange={(event) => onChange("identifier", event.target.value)}
+                autoComplete="username"
+                placeholder="maestro10 ili ti@primjer.hr"
+                required
+                autoFocus
+              />
+            </label>
+          )}
+          <label htmlFor="account-password">
+            Lozinka
+            <input
+              id="account-password"
+              type="password"
+              value={form.password}
+              onChange={(event) => onChange("password", event.target.value)}
+              minLength={registering ? 15 : undefined}
+              maxLength={128}
+              autoComplete={registering ? "new-password" : "current-password"}
+              placeholder={
+                registering ? "Najmanje 15 znakova" : "Tvoja lozinka"
+              }
+              required
+            />
+          </label>
+          {error ? (
+            <p className="account-form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button className="account-submit" type="submit" disabled={busy}>
+            {busy
+              ? "Spremamo…"
+              : registering
+                ? "Izradi račun →"
+                : "Prijavi se →"}
+          </button>
+        </form>
+        <button type="button" className="account-skip" onClick={onClose}>
+          Nastavi bez računa
+        </button>
+        <p className="account-privacy">
+          Račun nije obavezan za igru. E-mail se nikad ne prikazuje na javnom
+          profilu.
+        </p>
+      </section>
+    </div>
   );
 }
 
@@ -1205,6 +1637,473 @@ function MatchCard({
   );
 }
 
+function historyPosition(entry: SeasonHistoryEntry) {
+  const position = entry.finalPosition ?? entry.result?.finalPosition;
+  return typeof position === "number" ? position : null;
+}
+
+function historyTitle(entry: SeasonHistoryEntry) {
+  const position = historyPosition(entry);
+  if (entry.perfectSeason || entry.result?.awards?.perfectSeason) return "36–0";
+  if (entry.titleWon || entry.result?.awards?.leagueTitle || position === 1) {
+    return "Prvak";
+  }
+  return position ? `${position}. mjesto` : "Završena sezona";
+}
+
+function AccountHistoryPitch({ season }: { season: SeasonHistoryEntry }) {
+  const picks = season.picks ?? [];
+  const formation = season.formation ?? season.settings?.formation ?? "4-3-3";
+  const storedSlots = season.settings?.slots ?? [];
+  const fallbackLabels = FORMATION_PREVIEWS[formation] ?? [];
+  const points = FORMATION_COORDINATES[formation] ?? [];
+
+  return (
+    <div className="history-pitch" aria-label={`Postava ${formation}`}>
+      <span className="history-pitch-formation">{formation}</span>
+      {picks.map((pick, pickIndex) => {
+        const storedIndex = storedSlots.findIndex(
+          (slot) => slot.id === pick.slotId,
+        );
+        const labelOccurrence = picks
+          .slice(0, pickIndex)
+          .filter((previous) => previous.slotLabel === pick.slotLabel).length;
+        const matchingLabelIndexes = fallbackLabels
+          .map((label, index) => (label === pick.slotLabel ? index : -1))
+          .filter((index) => index >= 0);
+        const labelIndex =
+          matchingLabelIndexes[labelOccurrence] ??
+          matchingLabelIndexes.at(-1) ??
+          -1;
+        const pointIndex =
+          storedIndex >= 0
+            ? storedIndex
+            : labelIndex >= 0
+              ? labelIndex
+              : pickIndex;
+        const point = points[pointIndex] ?? ([50, 50] as const);
+        return (
+          <div
+            className="history-pitch-player"
+            key={`${pick.slotId}-${pick.player.id}`}
+            style={
+              {
+                "--history-x": `${point[0]}%`,
+                "--history-y": `${point[1]}%`,
+              } as CSSProperties
+            }
+          >
+            <span>{pick.slotLabel}</span>
+            <strong>{surname(pick.player.name)}</strong>
+            <small>{pick.selectedRating ?? pick.player.rating ?? "—"}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AccountPanel({
+  history,
+  selectedSeason,
+  selectedId,
+  loading,
+  detailLoading,
+  error,
+  publicView,
+  onClose,
+  onSelect,
+  onBack,
+  onLogout,
+  onCopyProfile,
+}: {
+  history: AccountHistory | null;
+  selectedSeason: SeasonHistoryEntry | null;
+  selectedId: string | null;
+  loading: boolean;
+  detailLoading: boolean;
+  error: string;
+  publicView: boolean;
+  onClose: () => void;
+  onSelect: (id: string) => void;
+  onBack: () => void;
+  onLogout: () => void;
+  onCopyProfile: () => void;
+}) {
+  const account = history?.account;
+  const stats = history?.stats ?? EMPTY_ACCOUNT_STATS;
+  const seasons = history?.seasons ?? [];
+  const result = selectedSeason ? historyResult(selectedSeason) : null;
+  const displayName =
+    account?.displayName?.trim() || account?.username || "HNL menadžer";
+  const totalMatches = stats.wins + stats.draws + stats.losses;
+  const displayedWinRate =
+    typeof stats.winRate === "number" && stats.winRate > 0
+      ? stats.winRate > 1
+        ? stats.winRate
+        : stats.winRate * 100
+      : totalMatches
+        ? (stats.wins / totalMatches) * 100
+        : 0;
+
+  return (
+    <div className="account-panel-layer">
+      <section
+        className="account-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Profil i povijest HNL sezona"
+      >
+        <header className="account-panel-topbar">
+          <button
+            type="button"
+            className="account-panel-brand"
+            onClick={onBack}
+            disabled={!selectedId}
+          >
+            <span>36–0</span>
+            <strong>{selectedId ? "← Povijest sezona" : "PROFIL MENADŽERA"}</strong>
+          </button>
+          <button
+            type="button"
+            className="account-panel-close"
+            onClick={onClose}
+            aria-label="Zatvori profil"
+          >
+            ×
+          </button>
+        </header>
+
+        {loading ? (
+          <div className="account-panel-state" role="status">
+            <i aria-hidden="true" />
+            <strong>Učitavamo tvoju svlačionicu…</strong>
+          </div>
+        ) : error ? (
+          <div className="account-panel-state error" role="alert">
+            <span>!</span>
+            <strong>Profil trenutačno nije dostupan.</strong>
+            <p>{error}</p>
+          </div>
+        ) : selectedId ? (
+          detailLoading || !selectedSeason ? (
+            <div className="account-panel-state" role="status">
+              <i aria-hidden="true" />
+              <strong>Otvaramo zapis sezone…</strong>
+            </div>
+          ) : (
+            <div className="account-season-detail">
+              <section className="history-detail-hero">
+                <div>
+                  <p className="eyebrow">
+                    {selectedSeason.mode === "live" ? "LIVE DRAFT" : "SOLO DRAFT"} ·{" "}
+                    {formatHistoryDate(
+                      selectedSeason.completedAt ?? selectedSeason.createdAt,
+                    )}
+                  </p>
+                  <h1>{historyTitle(selectedSeason)}</h1>
+                  <p>
+                    {selectedSeason.managerName || displayName} ·{" "}
+                    {selectedSeason.formation ??
+                      selectedSeason.settings?.formation ??
+                      "Formacija nije zabilježena"}
+                  </p>
+                </div>
+                <div className="history-detail-points">
+                  <strong>{historyNumber(selectedSeason, "points")}</strong>
+                  <span>BODOVA</span>
+                </div>
+              </section>
+
+              <section className="history-detail-record">
+                {[
+                  ["P", historyNumber(selectedSeason, "wins"), "Pobjede"],
+                  ["N", historyNumber(selectedSeason, "draws"), "Neriješeno"],
+                  ["I", historyNumber(selectedSeason, "losses"), "Porazi"],
+                  [
+                    "GR",
+                    historyNumber(selectedSeason, "goalDifference"),
+                    `${historyNumber(selectedSeason, "goalsFor")}:${historyNumber(
+                      selectedSeason,
+                      "goalsAgainst",
+                    )}`,
+                  ],
+                ].map(([label, value, copy]) => (
+                  <div key={String(label)}>
+                    <span>{label}</span>
+                    <strong>
+                      {label === "GR" && Number(value) > 0 ? "+" : ""}
+                      {value}
+                    </strong>
+                    <small>{copy}</small>
+                  </div>
+                ))}
+              </section>
+
+              {selectedSeason.picks?.length ? (
+                <section className="history-detail-section history-lineup-section">
+                  <div className="account-section-heading">
+                    <span>TVA XI</span>
+                    <h2>Momčad koja je odigrala sezonu.</h2>
+                  </div>
+                  <AccountHistoryPitch season={selectedSeason} />
+                </section>
+              ) : null}
+
+              {result?.playerStats?.length ? (
+                <section className="history-detail-section">
+                  <div className="account-section-heading">
+                    <span>UČINAK IGRAČA</span>
+                    <h2>Najbolji pojedinci.</h2>
+                  </div>
+                  <div className="account-player-list">
+                    {result.playerStats
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          b.goals +
+                            b.assists -
+                            (a.goals + a.assists) ||
+                          a.playerName.localeCompare(b.playerName),
+                      )
+                      .slice(0, 11)
+                      .map((player, index) => (
+                        <div key={player.playerId}>
+                          <span>{String(index + 1).padStart(2, "0")}</span>
+                          <strong>{player.playerName}</strong>
+                          <small>
+                            {player.goals} G · {player.assists} A ·{" "}
+                            {player.cleanSheets} ČM
+                          </small>
+                          <b>{player.rating ?? "—"}</b>
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {result?.leagueTable?.length ? (
+                <section className="history-detail-section">
+                  <div className="account-section-heading">
+                    <span>KONAČNA TABLICA</span>
+                    <h2>HNL nakon 36 kola.</h2>
+                  </div>
+                  <div className="account-league-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Klub</th>
+                          <th>O</th>
+                          <th>GR</th>
+                          <th>B</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.leagueTable.map((row) => (
+                          <tr
+                            key={row.teamId}
+                            className={row.isDraftedXI ? "mine" : ""}
+                          >
+                            <td>{row.position}</td>
+                            <td>
+                              <ClubShield
+                                club={{
+                                  id: row.teamId,
+                                  name: row.name,
+                                  shortName: row.shortName,
+                                  accent: row.accent,
+                                }}
+                                compact
+                              />
+                              <strong>
+                                {row.isDraftedXI
+                                  ? selectedSeason.managerName || displayName
+                                  : row.name}
+                              </strong>
+                            </td>
+                            <td>{row.played}</td>
+                            <td>
+                              {row.goalDifference > 0 ? "+" : ""}
+                              {row.goalDifference}
+                            </td>
+                            <td>
+                              <strong>{row.points}</strong>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ) : null}
+
+              {result?.matches?.length ? (
+                <section className="history-detail-section">
+                  <div className="account-section-heading">
+                    <span>RASPORED</span>
+                    <h2>Svih 36 utakmica.</h2>
+                  </div>
+                  <div className="account-fixture-grid">
+                    {result.matches.map((match) => (
+                      <MatchCard key={match.matchweek} match={match} />
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          )
+        ) : (
+          <div className="account-overview">
+            <section className="account-profile-hero">
+              <div className="account-avatar" aria-hidden="true">
+                {managerInitials(displayName) || "36"}
+              </div>
+              <div>
+                <p className="eyebrow">
+                  {publicView ? "JAVNI PROFIL" : "TVOJ PROFIL"}
+                </p>
+                <h1 id="account-panel-title">{displayName}</h1>
+                <p>@{account?.username}</p>
+                <small>
+                  Menadžer od {formatHistoryDate(account?.createdAt)}
+                </small>
+              </div>
+              {!publicView ? (
+                <div className="account-profile-actions">
+                  <button type="button" onClick={onCopyProfile}>
+                    Kopiraj javni profil
+                  </button>
+                  <button type="button" onClick={onLogout}>
+                    Odjava
+                  </button>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="account-stat-grid" aria-label="Statistika menadžera">
+              {[
+                ["SEZONE", stats.seasonsPlayed, "završeno"],
+                ["NASLOVI", stats.titles, "osvojeno"],
+                ["POBJEDE", stats.wins, `${displayedWinRate.toFixed(1)}%`],
+                [
+                  "BODOVI",
+                  stats.points,
+                  stats.seasonsPlayed
+                    ? `prosjek ${(stats.averagePoints ?? 0).toFixed(1)} · rekord ${
+                        stats.bestPoints ?? 0
+                      }`
+                    : "ukupno",
+                ],
+                [
+                  "GOL-RAZLIKA",
+                  `${stats.goalDifference > 0 ? "+" : ""}${stats.goalDifference}`,
+                  `${stats.goalsFor}:${stats.goalsAgainst}`,
+                ],
+                [
+                  "NAJBOLJI PLASMAN",
+                  stats.bestFinish ? `${stats.bestFinish}.` : "—",
+                  stats.averageFinish
+                    ? `prosjek ${stats.averageFinish.toFixed(1)}.`
+                    : "još bez plasmana",
+                ],
+              ].map(([label, value, copy]) => (
+                <div key={String(label)}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                  <small>{copy}</small>
+                </div>
+              ))}
+            </section>
+
+            <section className="account-history-section">
+              <div className="account-section-heading">
+                <span>SEZONSKI ARHIV</span>
+                <h2>
+                  {seasons.length
+                    ? `${seasons.length} momčad${
+                        seasons.length === 1 ? "" : "i"
+                      } u povijesti.`
+                    : "Tvoja prva sezona tek čeka."}
+                </h2>
+                <p>
+                  {publicView
+                    ? "Posljednji javno vidljivi rezultati ovog menadžera."
+                    : "Otvorite sezonu za postavu, tablicu, igrače i svih 36 kola."}
+                </p>
+              </div>
+              {seasons.length ? (
+                <div className="account-season-list">
+                  {seasons.map((season, index) => {
+                    const position = historyPosition(season);
+                    const title = historyTitle(season);
+                    const canOpen = !publicView;
+                    return (
+                      <button
+                        type="button"
+                        key={season.id}
+                        onClick={() => canOpen && onSelect(season.id)}
+                        disabled={!canOpen}
+                        className={
+                          season.titleWon ||
+                          season.perfectSeason ||
+                          position === 1
+                            ? "champion"
+                            : ""
+                        }
+                      >
+                        <span className="account-season-index">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <div className="account-season-main">
+                          <span>
+                            {season.mode === "live" ? "LIVE" : "SOLO"} ·{" "}
+                            {formatHistoryDate(
+                              season.completedAt ?? season.createdAt,
+                            )}
+                          </span>
+                          <strong>{title}</strong>
+                          <small>
+                            {season.managerName || displayName} ·{" "}
+                            {season.formation || "Formacija —"}
+                          </small>
+                        </div>
+                        <div className="account-season-record">
+                          <strong>{historyNumber(season, "points")}</strong>
+                          <span>BODOVA</span>
+                          <small>
+                            {historyNumber(season, "wins")}–{historyNumber(season, "draws")}–
+                            {historyNumber(season, "losses")}
+                          </small>
+                        </div>
+                        <span className="account-season-arrow" aria-hidden="true">
+                          {canOpen ? "→" : "•"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="account-empty-state">
+                  <span aria-hidden="true">＋</span>
+                  <strong>Odigraj draft i simuliraj sezonu.</strong>
+                  <p>
+                    Rezultat se automatski sprema kada si prijavljen prije
+                    završetka simulacije.
+                  </p>
+                  <button type="button" onClick={onClose}>
+                    Kreni igrati →
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export default function HnlDraftGame() {
   const [screen, setScreen] = useState<Screen>("home");
   const [mode, setMode] = useState<GameMode>("solo");
@@ -1233,6 +2132,32 @@ export default function HnlDraftGame() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [account, setAccount] = useState<Account | null>(null);
+  const [, setAccountStats] =
+    useState<Partial<AccountStats> | null>(null);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [accountDialogMode, setAccountDialogMode] =
+    useState<AccountDialogMode>("login");
+  const [accountForm, setAccountForm] = useState<AccountFormState>({
+    identifier: "",
+    username: "",
+    email: "",
+    password: "",
+  });
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [accountPanelOpen, setAccountPanelOpen] = useState(false);
+  const [accountHistory, setAccountHistory] =
+    useState<AccountHistory | null>(null);
+  const [accountHistoryLoading, setAccountHistoryLoading] = useState(false);
+  const [accountHistoryError, setAccountHistoryError] = useState("");
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(
+    null,
+  );
+  const [selectedHistorySeason, setSelectedHistorySeason] =
+    useState<SeasonHistoryEntry | null>(null);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [publicProfileView, setPublicProfileView] = useState(false);
 
   const coverage = catalog?.metadata?.normalizedCoverage;
   const earliestYear = coverage?.earliestStartYear ?? 1995;
@@ -1245,6 +2170,76 @@ export default function HnlDraftGame() {
       ),
     [earliestYear, latestYear],
   );
+
+  const loadOwnHistory = useCallback(
+    async (currentAccount: Account) => {
+      setAccountHistoryLoading(true);
+      setAccountHistoryError("");
+      try {
+        const payload = await apiRequest<HistoryResponse>(
+          "/account/history?limit=100&offset=0",
+        );
+        const normalized = normalizeHistory(payload, currentAccount);
+        normalized.account = currentAccount;
+        setAccountStats(normalized.stats);
+        setAccountHistory(normalized);
+      } catch (historyError) {
+        setAccountHistoryError(
+          historyError instanceof Error
+            ? historyError.message
+            : "Povijest sezona nije dostupna.",
+        );
+      } finally {
+        setAccountHistoryLoading(false);
+      }
+    },
+    [],
+  );
+
+  const openPublicProfile = useCallback(async (username: string) => {
+    const cleanUsername = username.trim();
+    if (!cleanUsername) return;
+    setPublicProfileView(true);
+    setAccountPanelOpen(true);
+    setSelectedHistoryId(null);
+    setSelectedHistorySeason(null);
+    setAccountHistory(null);
+    setAccountHistoryLoading(true);
+    setAccountHistoryError("");
+    try {
+      const response = await apiRequest<PublicProfileResponse>(
+        `/profiles/${encodeURIComponent(cleanUsername)}`,
+      );
+      if (!response.profile) {
+        throw new ApiError("Profil nije pronađen.", "profile_not_found", 404);
+      }
+      const profileAccount: Account = {
+        id: `public:${response.profile.username}`,
+        username: response.profile.username,
+        displayName: response.profile.username,
+        createdAt: response.profile.createdAt,
+        stats: response.profile.stats,
+      };
+      setAccountHistory(
+        normalizeHistory(
+          {
+            account: profileAccount,
+            stats: response.profile.stats,
+            seasons: response.profile.recentSeasons ?? [],
+          },
+          profileAccount,
+        ),
+      );
+    } catch (profileError) {
+      setAccountHistoryError(
+        profileError instanceof Error
+          ? profileError.message
+          : "Javni profil nije dostupan.",
+      );
+    } finally {
+      setAccountHistoryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -1271,6 +2266,8 @@ export default function HnlDraftGame() {
       const params = new URLSearchParams(window.location.search);
       const invitedCode = params.get("room");
       if (invitedCode) setJoinCode(invitedCode.toUpperCase().slice(0, 6));
+      const profileUsername = params.get("profile");
+      if (profileUsername) void openPublicProfile(profileUsername);
 
       const saved = window.sessionStorage.getItem("hnl-room-session");
       if (saved) {
@@ -1298,7 +2295,51 @@ export default function HnlDraftGame() {
     return () => {
       active = false;
     };
+  }, [openPublicProfile]);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest<AccountResponse>("/account/me")
+      .then((payload) => {
+        if (!active) return;
+        const restoredAccount = accountFromResponse(payload);
+        if (!restoredAccount) return;
+        setAccount(restoredAccount);
+        setAccountStats(payload.stats ?? restoredAccount.stats ?? null);
+        setManagerName((current) => current || restoredAccount.username);
+      })
+      .catch((restoreError) => {
+        if (
+          restoreError instanceof ApiError &&
+          (restoreError.status === 401 || restoreError.status === 404)
+        ) {
+          return;
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!accountDialogOpen && !accountPanelOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (accountDialogOpen) setAccountDialogOpen(false);
+      if (accountPanelOpen) {
+        setAccountPanelOpen(false);
+        setSelectedHistoryId(null);
+        setSelectedHistorySeason(null);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [accountDialogOpen, accountPanelOpen]);
 
   const activeScreen: Screen = room
     ? room.status === "lobby"
@@ -1488,6 +2529,178 @@ export default function HnlDraftGame() {
   const clearMessages = () => {
     setError("");
     setNotice("");
+  };
+
+  const openAccountSurface = () => {
+    setAccountError("");
+    if (!account) {
+      setAccountDialogMode("login");
+      setAccountDialogOpen(true);
+      return;
+    }
+    setPublicProfileView(false);
+    setSelectedHistoryId(null);
+    setSelectedHistorySeason(null);
+    setAccountPanelOpen(true);
+    void loadOwnHistory(account);
+  };
+
+  const closeAccountPanel = () => {
+    setAccountPanelOpen(false);
+    setSelectedHistoryId(null);
+    setSelectedHistorySeason(null);
+    if (publicProfileView) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("profile");
+      window.history.replaceState({}, "", url);
+    }
+    setPublicProfileView(false);
+  };
+
+  const submitAccount = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAccountError("");
+    setAccountBusy(true);
+    try {
+      const registering = accountDialogMode === "register";
+      const payload = registering
+        ? {
+            username: accountForm.username.trim(),
+            email: accountForm.email.trim(),
+            password: accountForm.password,
+          }
+        : {
+            identifier: accountForm.identifier.trim(),
+            password: accountForm.password,
+          };
+      const response = await apiRequest<AccountResponse>(
+        registering ? "/account/register" : "/account/login",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      const nextAccount = accountFromResponse(response);
+      if (!nextAccount) {
+        throw new ApiError(
+          "Prijava je uspjela, ali profil nije vraćen.",
+          "invalid_account_response",
+        );
+      }
+
+      setAccount(nextAccount);
+      setAccountStats(response.stats ?? nextAccount.stats ?? null);
+      setManagerName((current) => current || nextAccount.username);
+      setAccountForm((current) => ({ ...current, password: "" }));
+
+      if (room && participantToken) {
+        try {
+          const claim = await apiRequest<{
+            claimed: boolean;
+            participantId?: string;
+            room?: Room;
+          }>(`/rooms/${room.code}/claim`, {
+            method: "POST",
+            body: JSON.stringify({ participantToken }),
+          });
+          if (claim.room) setRoom(claim.room);
+          setNotice(
+            claim.claimed
+              ? "Račun je povezan s ovom sobom. Sezona će biti spremljena."
+              : "Prijavljen si. Ova soba već je povezana s računom.",
+          );
+        } catch (claimError) {
+          setNotice(
+            claimError instanceof ApiError && claimError.status === 409
+              ? "Prijavljen si, ali ova momčad već pripada drugom računu."
+              : "Prijavljen si. Aktivnu sobu nismo uspjeli povezati s profilom.",
+          );
+        }
+      } else {
+        setNotice(
+          registering
+            ? "Račun je spreman. Sve buduće sezone automatski se spremaju."
+            : "Prijava uspješna.",
+        );
+      }
+
+      setAccountDialogOpen(false);
+      setPublicProfileView(false);
+      setSelectedHistoryId(null);
+      setSelectedHistorySeason(null);
+      setAccountPanelOpen(true);
+      await loadOwnHistory(nextAccount);
+    } catch (submitError) {
+      setAccountError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Račun trenutačno nije dostupan.",
+      );
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const selectHistorySeason = async (historyId: string) => {
+    if (publicProfileView) return;
+    setSelectedHistoryId(historyId);
+    setSelectedHistorySeason(null);
+    setHistoryDetailLoading(true);
+    setAccountHistoryError("");
+    try {
+      const response = await apiRequest<HistoryDetailResponse>(
+        `/account/history/${encodeURIComponent(historyId)}`,
+      );
+      if (!response.season) {
+        throw new ApiError("Zapis sezone nije pronađen.", "history_not_found", 404);
+      }
+      setSelectedHistorySeason(response.season);
+    } catch (detailError) {
+      setAccountHistoryError(
+        detailError instanceof Error
+          ? detailError.message
+          : "Zapis sezone nije dostupan.",
+      );
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  };
+
+  const logoutAccount = async () => {
+    setAccountBusy(true);
+    try {
+      await apiRequest<{ ok: boolean }>("/account/logout", {
+        method: "POST",
+      });
+      setAccount(null);
+      setAccountStats(null);
+      setAccountHistory(null);
+      setSelectedHistoryId(null);
+      setSelectedHistorySeason(null);
+      setAccountPanelOpen(false);
+      setNotice("Odjavljen si. Anonimna igra i dalje je dostupna.");
+    } catch (logoutError) {
+      setAccountHistoryError(
+        logoutError instanceof Error
+          ? logoutError.message
+          : "Odjava nije uspjela.",
+      );
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const copyPublicProfile = async () => {
+    if (!account) return;
+    const url = new URL(window.location.origin);
+    url.pathname = window.location.pathname;
+    url.searchParams.set("profile", account.username);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setNotice("Poveznica javnog profila je kopirana.");
+    } catch {
+      setNotice(url.toString());
+    }
   };
 
   const requireName = () => {
@@ -1852,6 +3065,21 @@ export default function HnlDraftGame() {
             placeholder="npr. Josip"
             autoComplete="nickname"
           />
+          <div className={`entry-account-note${account ? " connected" : ""}`}>
+            <span aria-hidden="true">{account ? "✓" : "＋"}</span>
+            <p>
+              {account ? (
+                <>
+                  Sezona se sprema na profil <strong>@{account.username}</strong>.
+                </>
+              ) : (
+                <>Igraj anonimno ili izradi račun za trajnu povijest sezona.</>
+              )}
+            </p>
+            <button type="button" onClick={openAccountSurface}>
+              {account ? "Profil" : "Prijava"}
+            </button>
+          </div>
           <div className="mode-grid">
             <button
               className="mode-card primary"
@@ -3044,6 +4272,16 @@ export default function HnlDraftGame() {
             <button onClick={() => void shareSeason()}>Podijeli sezonu</button>
             <button onClick={newGame}>Nova igra ↗</button>
           </div>
+          <button
+            type="button"
+            className={`result-account-status${account ? " saved" : ""}`}
+            onClick={openAccountSurface}
+          >
+            <span aria-hidden="true">{account ? "✓" : "＋"}</span>
+            {account
+              ? `Spremljeno na @${account.username} · otvori povijest`
+              : "Sljedeću sezonu spremi na profil"}
+          </button>
         </section>
 
         <section className="season-verdict">
@@ -3310,7 +4548,13 @@ export default function HnlDraftGame() {
       <a className="skip-link" href="#main-content">
         Preskoči na sadržaj
       </a>
-      <Header stage={stage} room={room} onHome={goHome} />
+      <Header
+        stage={stage}
+        room={room}
+        account={account}
+        onHome={goHome}
+        onAccount={openAccountSurface}
+      />
       <div className="status-announcer" aria-live="polite">
         {error || notice}
       </div>
@@ -3333,6 +4577,46 @@ export default function HnlDraftGame() {
       {activeScreen === "lobby" ? renderLobby() : null}
       {activeScreen === "draft" ? renderDraft() : null}
       {activeScreen === "results" ? renderResults() : null}
+      {accountDialogOpen ? (
+        <AccountDialog
+          mode={accountDialogMode}
+          form={accountForm}
+          busy={accountBusy}
+          error={accountError}
+          onMode={(nextMode) => {
+            setAccountDialogMode(nextMode);
+            setAccountError("");
+          }}
+          onChange={(field, value) =>
+            setAccountForm((current) => ({ ...current, [field]: value }))
+          }
+          onSubmit={submitAccount}
+          onClose={() => {
+            setAccountDialogOpen(false);
+            setAccountError("");
+          }}
+        />
+      ) : null}
+      {accountPanelOpen ? (
+        <AccountPanel
+          history={accountHistory}
+          selectedSeason={selectedHistorySeason}
+          selectedId={selectedHistoryId}
+          loading={accountHistoryLoading}
+          detailLoading={historyDetailLoading}
+          error={accountHistoryError}
+          publicView={publicProfileView}
+          onClose={closeAccountPanel}
+          onSelect={(id) => void selectHistorySeason(id)}
+          onBack={() => {
+            setSelectedHistoryId(null);
+            setSelectedHistorySeason(null);
+            setAccountHistoryError("");
+          }}
+          onLogout={() => void logoutAccount()}
+          onCopyProfile={() => void copyPublicProfile()}
+        />
+      ) : null}
       <footer className="site-footer">
         <p>
           36–0 je nezavisna fan-made HNL draft igra. Nije povezana s HNS-om,

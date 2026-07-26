@@ -4,7 +4,8 @@ This stack runs the HNL club-season draft locally:
 
 - `web`: Croatian room/draft interface at <http://localhost:3001>
 - `api`: server-authoritative room service at <http://localhost:8002>
-- `hnl_rooms`: a named Docker volume containing the SQLite room database
+- `hnl_rooms`: a named Docker volume containing rooms, accounts, sessions, and
+  saved season history in SQLite
 
 The browser creates or joins a six-character room. Every manager spins and
 drafts independently, while room state, tokens, versions, deterministic seeds,
@@ -22,6 +23,10 @@ data:
 ```bash
 docker compose down
 ```
+
+Use the `localhost` URL exactly as shown. The local frontend also calls
+`http://localhost:8002`, so the browser can send the SameSite account cookie
+between the two development ports.
 
 Change ports and the browser-facing API URL together when needed:
 
@@ -66,6 +71,14 @@ Live rooms use the same endpoint with `"mode":"live"`. Friends join with
 Authenticated room state is available at `GET /rooms/{CODE}` using the
 returned participant token as a Bearer token.
 
+With the stack running, the account/history smoke test registers a temporary
+local account, completes a short season, checks private/public history
+boundaries, and logs out:
+
+```bash
+python3 scripts/smoke_account_history.py
+```
+
 ## Data and reproducibility
 
 The image bundles `data/hnl_draft_catalog.json`; the API reports its exact
@@ -77,3 +90,6 @@ Player ratings and the final 36-round season are game estimates, not official
 HNS ratings or sporting predictions. The current catalog also identifies its
 historical roster gaps instead of presenting partial source coverage as
 complete.
+
+For the public HTTPS stack, server firewall, Cloudflare DNS, backups, updates,
+and rollback, follow [HOSTING.md](HOSTING.md).

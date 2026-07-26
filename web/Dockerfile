@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY . .
 
-ARG NEXT_PUBLIC_SIM_API_URL=http://127.0.0.1:8002
+ARG NEXT_PUBLIC_SIM_API_URL=http://localhost:8002
 ENV NEXT_PUBLIC_SIM_API_URL=$NEXT_PUBLIC_SIM_API_URL
 
 RUN npm run build
@@ -15,7 +15,7 @@ RUN npm run build
 FROM node:22.13.0-alpine AS runtime
 
 ENV NODE_ENV=production \
-    NEXT_PUBLIC_SIM_API_URL=http://127.0.0.1:8002
+    NEXT_PUBLIC_SIM_API_URL=http://localhost:8002
 
 WORKDIR /app
 

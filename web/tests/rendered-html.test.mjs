@@ -89,6 +89,36 @@ test("keeps room flows, disclosures, and accessible structure in source", async 
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
 
+test("ships cookie-authenticated accounts with durable season history", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /credentials:\s*"include"/);
+  assert.match(page, /"\/account\/register"/);
+  assert.match(page, /"\/account\/login"/);
+  assert.match(page, /"\/account\/logout"/);
+  assert.match(page, /"\/account\/me"/);
+  assert.match(page, /\/account\/history\?limit=100&offset=0/);
+  assert.match(page, /`\/account\/history\/\$\{encodeURIComponent\(historyId\)\}`/);
+  assert.match(page, /`\/profiles\/\$\{encodeURIComponent\(cleanUsername\)\}`/);
+  assert.match(page, /`\/rooms\/\$\{room\.code\}\/claim`/);
+  assert.match(page, /JSON\.stringify\(\{\s*participantToken\s*\}\)/);
+  assert.match(page, /function AccountDialog/);
+  assert.match(page, /function AccountPanel/);
+  assert.match(page, /setAccountStats\(normalized\.stats\)/);
+  assert.doesNotMatch(page, /\.\.\.\(currentStats \?\? accountStats/);
+  assert.match(page, /Povijest sezona/);
+  assert.match(page, /Kopiraj javni profil/);
+  assert.match(page, /minLength=\{registering \? 15 : undefined\}/);
+  assert.match(page, /Račun nije obavezan za igru/);
+  assert.match(css, /\.account-modal-backdrop/);
+  assert.match(css, /\.account-stat-grid/);
+  assert.match(css, /\.account-season-list/);
+  assert.match(css, /\.history-pitch-player/);
+});
+
 test("ships a validated local crest for every catalog club identity", async () => {
   const expectedIds = [
     "144",

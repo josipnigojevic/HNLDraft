@@ -1,9 +1,14 @@
 import json
+import http.cookiejar
+import os
+import sqlite3
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 import api_rooms
 
@@ -311,6 +316,7 @@ class RoomStoreTests(unittest.TestCase):
             Path(self.temp_dir.name) / "rooms.sqlite3",
             test_catalog(),
             room_ttl_seconds=60,
+            password_scrypt_n=1 << 14,
             clock=self.clock,
         )
 
@@ -325,6 +331,7 @@ class RoomStoreTests(unittest.TestCase):
         seed: int = 380,
         target_picks: int = 2,
         max_players: int | None = None,
+        account_id: str | None = None,
     ) -> dict:
         settings = {
             "formation": "4-3-3",
@@ -340,7 +347,8 @@ class RoomStoreTests(unittest.TestCase):
                 "name": name,
                 "seed": seed,
                 "settings": settings,
-            }
+            },
+            account_id=account_id,
         )
 
     @staticmethod
@@ -360,6 +368,28 @@ class RoomStoreTests(unittest.TestCase):
             if item["available"]
         )
         return player, player["eligibleSlotIds"][0]
+
+    def complete_one_pick(self, created: dict) -> dict:
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            created["room"]["version"],
+        )
+        room = self.store.spin(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+        )
+        player, slot_id = self.first_available(room)
+        return self.store.pick(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+            player["id"],
+            slot_id,
+        )
 
     def test_create_start_spin_pick_and_complete(self) -> None:
         created = self.create(target_picks=1)
@@ -771,6 +801,353 @@ class RoomStoreTests(unittest.TestCase):
             thread.join()
         self.assertCountEqual(outcomes, ["ok", "version_conflict"])
 
+    def test_account_password_session_and_generic_auth_failures(self) -> None:
+        registered, session_token = self.store.register_account(
+            {
+                "username": "josip.hnl",
+                "email": "JOSIP@example.com",
+                "password": "correct horse battery staple 380",
+            }
+        )
+        self.assertEqual(registered["account"]["email"], "josip@example.com")
+        self.assertEqual(registered["stats"]["seasonsPlayed"], 0)
+        self.assertGreaterEqual(len(session_token), 40)
+
+        connection = self.store._connect()
+        try:
+            account_row = connection.execute(
+                "SELECT * FROM accounts WHERE id = ?",
+                (registered["account"]["id"],),
+            ).fetchone()
+            session_row = connection.execute(
+                "SELECT * FROM auth_sessions WHERE account_id = ?",
+                (registered["account"]["id"],),
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertNotEqual(
+            account_row["password_hash"],
+            "correct horse battery staple 380",
+        )
+        self.assertEqual(len(account_row["password_salt"]), 32)
+        self.assertEqual(account_row["password_n"], 1 << 14)
+        self.assertEqual(session_row["token_hash"], api_rooms._sha256(session_token))
+        self.assertNotEqual(session_row["token_hash"], session_token)
+
+        with self.assertRaises(api_rooms.RequestError) as duplicate:
+            self.store.register_account(
+                {
+                    "username": "someone.else",
+                    "email": "josip@example.com",
+                    "password": "another sufficiently long password 99",
+                }
+            )
+        self.assertEqual(duplicate.exception.code, "account_exists")
+        with self.assertRaises(api_rooms.RequestError) as missing_account:
+            self.store.login_account(
+                {
+                    "identifier": "nobody@example.com",
+                    "password": "incorrect but valid length",
+                }
+            )
+        with self.assertRaises(api_rooms.RequestError) as wrong_password:
+            self.store.login_account(
+                {
+                    "identifier": "josip.hnl",
+                    "password": "incorrect but valid length",
+                }
+            )
+        self.assertEqual(missing_account.exception.code, "invalid_credentials")
+        self.assertEqual(wrong_password.exception.code, "invalid_credentials")
+
+        logged_in, second_token = self.store.login_account(
+            {
+                "identifier": "JOSIP.HNL",
+                "password": "correct horse battery staple 380",
+            }
+        )
+        self.assertEqual(logged_in["account"]["id"], registered["account"]["id"])
+        self.store.logout_account(second_token)
+        with self.assertRaises(api_rooms.RequestError) as logged_out:
+            self.store.account_me(second_token)
+        self.assertEqual(logged_out.exception.code, "authentication_required")
+        self.assertEqual(
+            self.store.account_me(session_token)["account"]["username"],
+            "josip.hnl",
+        )
+
+    def test_password_policy_allows_unicode_and_has_no_composition_rule(self) -> None:
+        registered, _ = self.store.register_account(
+            {
+                "username": "unicode-user",
+                "email": "unicode@example.com",
+                "password": "duga lozinka bez brojeva 🔐",
+            }
+        )
+        self.assertEqual(registered["account"]["username"], "unicode-user")
+        with self.assertRaises(api_rooms.RequestError) as too_short:
+            self.store.register_account(
+                {
+                    "username": "short-user",
+                    "email": "short@example.com",
+                    "password": "short password",
+                }
+            )
+        self.assertEqual(too_short.exception.code, "invalid_password")
+
+    def test_completed_authenticated_season_is_snapshotted_once(self) -> None:
+        registered, session_token = self.store.register_account(
+            {
+                "username": "history-user",
+                "email": "history@example.com",
+                "password": "long enough history password",
+            }
+        )
+        created = self.create(
+            target_picks=1,
+            account_id=registered["account"]["id"],
+        )
+        room = self.complete_one_pick(created)
+        participant = self.own_participant(room)
+        history = self.store.account_history(session_token)
+        self.assertEqual(history["total"], 1)
+        self.assertEqual(history["stats"]["seasonsPlayed"], 1)
+        self.assertEqual(history["stats"]["points"], participant["result"]["points"])
+        self.assertEqual(history["stats"]["wins"], participant["result"]["wins"])
+        self.assertEqual(
+            history["stats"]["goalDifference"],
+            participant["result"]["goalDifference"],
+        )
+        summary = history["seasons"][0]
+        self.assertEqual(summary["roomCode"], created["roomCode"])
+        self.assertEqual(summary["formation"], "4-3-3")
+
+        # Re-reading a completed room recomputes the deterministic simulation,
+        # but the unique snapshot key prevents duplicate history entries.
+        self.store.get_room(created["roomCode"], created["participantToken"])
+        self.assertEqual(self.store.account_history(session_token)["total"], 1)
+        detail = self.store.account_history_detail(session_token, summary["id"])
+        self.assertEqual(detail["season"]["result"], participant["result"])
+        self.assertEqual(len(detail["season"]["picks"]), 1)
+
+        profile = self.store.public_profile("HISTORY-USER")["profile"]
+        self.assertNotIn("email", profile)
+        self.assertEqual(profile["stats"], history["stats"])
+        self.assertNotIn("roomCode", profile["recentSeasons"][0])
+
+    def test_account_can_claim_anonymous_completed_season(self) -> None:
+        registered, session_token = self.store.register_account(
+            {
+                "username": "claim-user",
+                "email": "claim@example.com",
+                "password": "claim this completed season",
+            }
+        )
+        account_id = registered["account"]["id"]
+
+        first = self.create(
+            seed=379,
+            target_picks=1,
+            account_id=account_id,
+        )
+        first_room = self.complete_one_pick(first)
+        first_result = self.own_participant(first_room)["result"]
+        before_claim = self.store.account_history(session_token)
+        self.assertEqual(before_claim["total"], 1)
+        self.assertEqual(before_claim["stats"]["seasonsPlayed"], 1)
+
+        created = self.create(seed=380, target_picks=1)
+        completed_room = self.complete_one_pick(created)
+        claimed_result = self.own_participant(completed_room)["result"]
+        claimed = self.store.claim_room_participant(
+            created["roomCode"],
+            created["participantToken"],
+            account_id,
+        )
+        self.assertTrue(claimed["claimed"])
+        expected_points = first_result["points"] + claimed_result["points"]
+        self.assertEqual(claimed["stats"]["seasonsPlayed"], 2)
+        self.assertEqual(claimed["stats"]["points"], expected_points)
+
+        history = self.store.account_history(session_token)
+        self.assertEqual(history["total"], 2)
+        self.assertEqual(history["stats"], claimed["stats"])
+        self.assertEqual(
+            self.store.account_me(session_token)["stats"],
+            claimed["stats"],
+        )
+        profile = self.store.public_profile("CLAIM-USER")["profile"]
+        self.assertEqual(profile["stats"], claimed["stats"])
+        self.assertEqual(len(profile["recentSeasons"]), 2)
+
+        claimed_again = self.store.claim_room_participant(
+            created["roomCode"],
+            created["participantToken"],
+            account_id,
+        )
+        self.assertTrue(claimed_again["claimed"])
+        self.assertEqual(claimed_again["stats"], claimed["stats"])
+        self.assertEqual(self.store.account_history(session_token)["total"], 2)
+
+        other, _ = self.store.register_account(
+            {
+                "username": "other-user",
+                "email": "other@example.com",
+                "password": "another long account password",
+            }
+        )
+        with self.assertRaises(api_rooms.RequestError) as conflict:
+            self.store.claim_room_participant(
+                created["roomCode"],
+                created["participantToken"],
+                other["account"]["id"],
+            )
+        self.assertEqual(conflict.exception.code, "participant_already_claimed")
+
+    def test_auth_session_expires(self) -> None:
+        _, session_token = self.store.register_account(
+            {
+                "username": "expiry-user",
+                "email": "expiry@example.com",
+                "password": "a sufficiently long passphrase",
+            }
+        )
+        self.clock.value += self.store.auth_session_seconds + 1
+        with self.assertRaises(api_rooms.RequestError) as expired:
+            self.store.account_me(session_token)
+        self.assertEqual(expired.exception.code, "authentication_required")
+
+    def test_login_scrypt_does_not_hold_room_store_lock(self) -> None:
+        self.store.register_account(
+            {
+                "username": "concurrency-user",
+                "email": "concurrency@example.com",
+                "password": "concurrent authentication password",
+            }
+        )
+        verification_started = threading.Event()
+        release_verification = threading.Event()
+        room_created = threading.Event()
+        login_errors: list[Exception] = []
+        original_matches = self.store._password_matches
+
+        def delayed_matches(*args: object, **kwargs: object) -> bool:
+            verification_started.set()
+            release_verification.wait(timeout=3)
+            return original_matches(*args, **kwargs)
+
+        def login() -> None:
+            try:
+                self.store.login_account(
+                    {
+                        "identifier": "concurrency-user",
+                        "password": "concurrent authentication password",
+                    }
+                )
+            except Exception as error:  # pragma: no cover - diagnostic path
+                login_errors.append(error)
+
+        def create_room() -> None:
+            self.create(target_picks=1)
+            room_created.set()
+
+        with mock.patch.object(
+            self.store,
+            "_password_matches",
+            side_effect=delayed_matches,
+        ):
+            login_thread = threading.Thread(target=login)
+            room_thread = threading.Thread(target=create_room)
+            login_thread.start()
+            self.assertTrue(verification_started.wait(timeout=1))
+            room_thread.start()
+            created_while_hashing = room_created.wait(timeout=1)
+            release_verification.set()
+            login_thread.join(timeout=3)
+            room_thread.join(timeout=3)
+        self.assertTrue(created_while_hashing)
+        self.assertFalse(login_errors)
+
+
+class AccountSchemaMigrationTests(unittest.TestCase):
+    def test_existing_participants_table_receives_nullable_account_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Path(temp_dir) / "legacy.sqlite3"
+            connection = sqlite3.connect(database)
+            connection.executescript(
+                """
+                CREATE TABLE rooms (
+                    code TEXT PRIMARY KEY,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    seed INTEGER NOT NULL,
+                    settings_json TEXT NOT NULL,
+                    host_participant_id TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                );
+                CREATE TABLE participants (
+                    id TEXT PRIMARY KEY,
+                    room_code TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    seat INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    turn_index INTEGER NOT NULL,
+                    spin_count INTEGER NOT NULL,
+                    rerolls_remaining INTEGER NOT NULL,
+                    current_spin_json TEXT,
+                    spin_history_json TEXT NOT NULL,
+                    joined_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    UNIQUE(room_code, seat)
+                );
+                CREATE TABLE picks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    room_code TEXT NOT NULL,
+                    participant_id TEXT NOT NULL,
+                    turn_index INTEGER NOT NULL,
+                    club_season_id TEXT NOT NULL,
+                    player_season_id TEXT NOT NULL,
+                    person_id TEXT NOT NULL,
+                    slot_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    UNIQUE(participant_id, turn_index),
+                    UNIQUE(participant_id, slot_id),
+                    UNIQUE(participant_id, player_season_id)
+                );
+                """
+            )
+            connection.close()
+            store = api_rooms.RoomStore(
+                database,
+                test_catalog(),
+                password_scrypt_n=1 << 14,
+            )
+            migrated = store._connect()
+            try:
+                columns = {
+                    row["name"]
+                    for row in migrated.execute(
+                        "PRAGMA table_info(participants)"
+                    ).fetchall()
+                }
+                tables = {
+                    row["name"]
+                    for row in migrated.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).fetchall()
+                }
+            finally:
+                migrated.close()
+            self.assertIn("account_id", columns)
+            self.assertIn("accounts", tables)
+            self.assertIn("auth_sessions", tables)
+            self.assertIn("season_history", tables)
+
 
 class HTTPAdapterTests(unittest.TestCase):
     def test_health_create_and_cors_preflight(self) -> None:
@@ -778,6 +1155,7 @@ class HTTPAdapterTests(unittest.TestCase):
             store = api_rooms.RoomStore(
                 Path(temp_dir) / "rooms.sqlite3",
                 test_catalog(),
+                password_scrypt_n=1 << 14,
             )
             try:
                 server = api_rooms.make_server(store, "127.0.0.1", 0)
@@ -827,6 +1205,128 @@ class HTTPAdapterTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)
+
+    def test_account_cookie_history_cors_and_rate_limit(self) -> None:
+        environment = {
+            "HNL_ALLOWED_ORIGINS": "http://localhost:3001",
+            "HNL_AUTH_RATE_LIMIT_ATTEMPTS": "1",
+            "HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS": "60",
+        }
+        with mock.patch.dict(os.environ, environment):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                store = api_rooms.RoomStore(
+                    Path(temp_dir) / "rooms.sqlite3",
+                    test_catalog(),
+                    password_scrypt_n=1 << 14,
+                )
+                try:
+                    server = api_rooms.make_server(store, "127.0.0.1", 0)
+                except PermissionError:
+                    self.skipTest(
+                        "The execution sandbox does not permit socket binding."
+                    )
+                thread = threading.Thread(
+                    target=server.serve_forever,
+                    daemon=True,
+                )
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_address[1]}"
+                cookie_jar = http.cookiejar.CookieJar()
+                opener = urllib.request.build_opener(
+                    urllib.request.HTTPCookieProcessor(cookie_jar)
+                )
+
+                def json_request(
+                    path: str,
+                    *,
+                    payload: dict | None = None,
+                    method: str = "GET",
+                ) -> tuple[dict, object]:
+                    body = json.dumps(payload).encode() if payload is not None else None
+                    request = urllib.request.Request(
+                        base + path,
+                        data=body,
+                        method=method,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Origin": "http://localhost:3001",
+                        },
+                    )
+                    response = opener.open(request)
+                    return json.load(response), response
+
+                try:
+                    registered, response = json_request(
+                        "/account/register",
+                        payload={
+                            "username": "http-user",
+                            "email": "http@example.com",
+                            "password": "a long HTTP account password",
+                        },
+                        method="POST",
+                    )
+                    self.assertEqual(response.status, 201)
+                    cookie_header = response.headers["Set-Cookie"]
+                    self.assertIn("HttpOnly", cookie_header)
+                    self.assertIn("SameSite=Lax", cookie_header)
+                    self.assertNotIn("Secure", cookie_header)
+                    self.assertEqual(
+                        response.headers["Access-Control-Allow-Origin"],
+                        "http://localhost:3001",
+                    )
+                    self.assertEqual(
+                        response.headers["Access-Control-Allow-Credentials"],
+                        "true",
+                    )
+                    self.assertNotIn("password", registered["account"])
+
+                    me, _ = json_request("/account/me")
+                    self.assertEqual(me["account"]["username"], "http-user")
+                    history, _ = json_request("/account/history")
+                    self.assertEqual(history["total"], 0)
+                    profile, _ = json_request("/profiles/http-user")
+                    self.assertNotIn("email", profile["profile"])
+
+                    with self.assertRaises(urllib.error.HTTPError) as bad_login:
+                        json_request(
+                            "/account/login",
+                            payload={
+                                "identifier": "http-user",
+                                "password": "wrong but sufficiently long",
+                            },
+                            method="POST",
+                        )
+                    self.assertEqual(bad_login.exception.code, 401)
+                    with self.assertRaises(urllib.error.HTTPError) as limited:
+                        json_request(
+                            "/account/login",
+                            payload={
+                                "identifier": "http-user",
+                                "password": "a long HTTP account password",
+                            },
+                            method="POST",
+                        )
+                    self.assertEqual(limited.exception.code, 429)
+                    limited_payload = json.load(limited.exception)
+                    self.assertEqual(
+                        limited_payload["error"]["code"],
+                        "auth_rate_limited",
+                    )
+
+                    logged_out, response = json_request(
+                        "/account/logout",
+                        payload={},
+                        method="POST",
+                    )
+                    self.assertTrue(logged_out["ok"])
+                    self.assertIn("Max-Age=0", response.headers["Set-Cookie"])
+                    with self.assertRaises(urllib.error.HTTPError) as anonymous:
+                        json_request("/account/me")
+                    self.assertEqual(anonymous.exception.code, 401)
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=2)
 
 
 if __name__ == "__main__":

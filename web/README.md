@@ -28,7 +28,7 @@ Then run the frontend:
 
 ```bash
 npm install
-NEXT_PUBLIC_SIM_API_URL=http://127.0.0.1:8002 npm run dev
+NEXT_PUBLIC_SIM_API_URL=http://localhost:8002 npm run dev
 ```
 
 For the tested production-like setup, use `docker compose up --build -d` from

@@ -2,6 +2,9 @@
 .agents
 .codex
 .openai
+.env
+.env.*
+backups
 __pycache__
 **/__pycache__
 *.py[cod]
@@ -12,4 +15,3 @@ scripts
 web
 research
 *.md
-

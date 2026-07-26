@@ -9,7 +9,7 @@ import urllib.request
 from typing import Any
 
 
-BASE_URL = os.getenv("HNL_SMOKE_API_URL", "http://127.0.0.1:8002").rstrip("/")
+BASE_URL = os.getenv("HNL_SMOKE_API_URL", "http://localhost:8002").rstrip("/")
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
