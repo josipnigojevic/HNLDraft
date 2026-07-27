@@ -43,10 +43,13 @@ Default HTTP contract (JSON request/response bodies):
       {"participantToken":"..."}
 
 The participant token can instead be sent as ``Authorization: Bearer ...`` or
-``X-Participant-Token``. Every state-changing draft action validates both the
-room version and that manager's turn. Random club-season spins are derived
-from the room seed, seat number, draft turn, and spin number, making them
-reproducible without trusting the browser.
+``X-Participant-Token``. State-changing draft actions validate the room
+version and that manager's turn, except that an ordinary first spin is
+participant-local and idempotent: unrelated room updates do not invalidate it,
+and retrying after a lost response returns the already committed spin. Rerolls
+keep strict room-version validation because they consume a limited resource.
+Random club-season spins are derived from the room seed, seat number, draft
+turn, and spin number, making them reproducible without trusting the browser.
 
 If ``data/hnl_draft_catalog.json`` exists, it is loaded at startup. Set
 ``HNL_CATALOG_PATH`` to override that location. The loader accepts either a
@@ -85,7 +88,7 @@ from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib.parse import parse_qs, urlsplit
 
 
-API_VERSION = "2.1.0"
+API_VERSION = "2.2.0"
 CATALOG_SCHEMA_VERSION = "1.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
@@ -3757,7 +3760,19 @@ class RoomStore:
     ) -> dict[str, Any]:
         with self._transaction() as connection:
             room = self._room_row(connection, code, mutation=True)
-            self._check_version(room, expected_version)
+            if not _is_int(expected_version):
+                raise RequestError(
+                    400,
+                    "expected_version_required",
+                    "expectedVersion must be the latest integer room version.",
+                )
+            # An ordinary spin only changes this participant's current draw.
+            # A room-wide version mismatch can therefore be caused by another
+            # manager's independent spin/pick and must not reject this one.
+            # Rerolls remain strict: a duplicate retry could otherwise consume
+            # an additional limited reroll.
+            if reroll:
+                self._check_version(room, expected_version)
             participant = self._participant_by_token(
                 connection, room["code"], token
             )
@@ -3773,11 +3788,10 @@ class RoomStore:
             slots = self._available_slots(settings, picks)
             current = _json_loads(participant["current_spin_json"], None)
             if current and not reroll:
-                raise RequestError(
-                    409,
-                    "already_spun",
-                    "Pick a player or use a reroll before spinning again.",
-                )
+                # POST /spin means "ensure this turn has a spin". This covers
+                # concurrent clicks and retries after a committed response was
+                # lost in transit, without incrementing spin_count again.
+                return self._room_view(connection, room, participant)
             if reroll:
                 if not current:
                     raise RequestError(

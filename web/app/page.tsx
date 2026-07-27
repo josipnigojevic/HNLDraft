@@ -389,8 +389,17 @@ type CatalogClubSeason = NonNullable<CatalogInventory["clubSeasons"]>[number];
 type SpinAnimation = {
   key: string;
   items: CatalogClubSeason[];
-  selected: Spin;
+  landingIndex: number;
+  loopLength?: number;
+  phase: "pending" | "settled";
+  round: number;
+  selected: Spin | null;
   reducedMotion: boolean;
+};
+
+type SpinStrip = {
+  items: CatalogClubSeason[];
+  landingIndex: number;
 };
 
 type SeasonPhase = "preview" | "running" | "final";
@@ -418,6 +427,9 @@ type SetupState = {
 const API_BASE = (
   process.env.NEXT_PUBLIC_SIM_API_URL ?? "http://localhost:8002"
 ).replace(/\/$/, "");
+
+const SPIN_CONFLICT_CODES = new Set(["version_conflict", "turn_conflict"]);
+const SPIN_CONFLICT_RETRY_DELAYS_MS = [90, 180, 360, 720] as const;
 
 const FORMATIONS = [
   "4-3-3",
@@ -695,6 +707,18 @@ class ApiError extends Error {
   }
 }
 
+function spinIdentity(spin: Spin | null | undefined) {
+  return spin
+    ? `${spin.turn}:${spin.spinNumber}:${spin.clubSeasonId}`
+    : null;
+}
+
+function waitForRetry(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -949,8 +973,49 @@ function playerStatLine(player: Player) {
 }
 
 function seededNoise(seed: number) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  const normalizedSeed = Math.abs(seed % 2_147_483_647);
+  const value = Math.sin(normalizedSeed * 12.9898) * 43758.5453;
   return value - Math.floor(value);
+}
+
+function spinCatalogPool(
+  catalog: CatalogInventory | null,
+  settings: RoomSettings,
+) {
+  return (
+    catalog?.clubSeasons?.filter(
+      (item) =>
+        item.season.startYear >= settings.seasonStart &&
+        item.season.startYear <= settings.seasonEnd,
+    ) ?? []
+  );
+}
+
+function deterministicSpinItem(
+  pool: CatalogClubSeason[],
+  seed: number,
+  excludedIds: ReadonlySet<string>,
+  avoidItems: readonly CatalogClubSeason[] = [],
+) {
+  if (!pool.length) return null;
+  const startIndex = Math.floor(seededNoise(seed) * pool.length) % pool.length;
+  const ordered = Array.from(
+    { length: pool.length },
+    (_, offset) => pool[(startIndex + offset) % pool.length],
+  );
+  return (
+    ordered.find(
+      (item) =>
+        !excludedIds.has(item.id) &&
+        avoidItems.every(
+          (avoid) =>
+            item.club.id !== avoid.club.id &&
+            item.season.startYear !== avoid.season.startYear,
+        ),
+    ) ??
+    ordered.find((item) => !excludedIds.has(item.id)) ??
+    ordered[0]
+  );
 }
 
 function buildSpinItems(
@@ -959,7 +1024,7 @@ function buildSpinItems(
   settings: RoomSettings,
   seed: number,
   seat: number,
-): CatalogClubSeason[] {
+): SpinStrip {
   const selectedItem: CatalogClubSeason =
     catalog?.clubSeasons?.find((item) => item.id === selected.clubSeasonId) ?? {
       id: selected.clubSeasonId,
@@ -967,28 +1032,85 @@ function buildSpinItems(
       season: selected.season,
       playerCount: selected.players?.length ?? 0,
     };
-  const eligible =
-    catalog?.clubSeasons?.filter(
-      (item) =>
-        item.season.startYear >= settings.seasonStart &&
-        item.season.startYear <= settings.seasonEnd,
-    ) ?? [];
-  const pool = eligible.length ? eligible : [selectedItem];
-  const decoys = Array.from({ length: 17 }, (_, index) => {
-    const noise = seededNoise(
-      seed +
+  const eligible = spinCatalogPool(catalog, settings);
+  const poolById = new Map(
+    [...eligible, selectedItem].map((item) => [item.id, item]),
+  );
+  const pool = [...poolById.values()];
+  const reelSeed = Math.abs(seed % 2_147_483_647);
+  const landingIndex = 17;
+  const decoys: CatalogClubSeason[] = [];
+  for (let index = 0; index < landingIndex; index += 1) {
+    const previous = decoys.at(-1);
+    const excludedIds = new Set(previous ? [previous.id] : []);
+    if (index === landingIndex - 1) excludedIds.add(selectedItem.id);
+    const item = deterministicSpinItem(
+      pool,
+      reelSeed +
         seat * 193 +
         selected.turn * 977 +
         selected.spinNumber * 1543 +
         index * 71,
+      excludedIds,
+      index === landingIndex - 1
+        ? [selectedItem]
+        : previous
+          ? [previous]
+          : [],
     );
-    return pool[Math.floor(noise * pool.length) % pool.length];
-  });
-  if (decoys.at(-1)?.id === selectedItem.id && pool.length > 1) {
-    decoys[decoys.length - 1] =
-      pool[(pool.findIndex((item) => item.id === selectedItem.id) + 1) % pool.length];
+    if (item) decoys.push(item);
   }
-  return [...decoys, selectedItem];
+
+  const items = [...decoys, selectedItem];
+  let neighbor = selectedItem;
+  for (let index = 0; index < 2; index += 1) {
+    const previousTailItems = items.slice(landingIndex + 1);
+    const avoidedNeighbors = [selectedItem, ...previousTailItems];
+    const tail = deterministicSpinItem(
+      pool,
+      reelSeed +
+        seat * 389 +
+        selected.turn * 1217 +
+        selected.spinNumber * 2017 +
+        index * 101,
+      new Set([selectedItem.id, neighbor.id]),
+      avoidedNeighbors,
+    );
+    if (tail) {
+      items.push(tail);
+      neighbor = tail;
+    }
+  }
+  return { items, landingIndex };
+}
+
+function buildPendingSpinItems(
+  catalog: CatalogInventory,
+  settings: RoomSettings,
+  seed: number,
+  seat: number,
+  turn: number,
+): { items: CatalogClubSeason[]; loopLength: number } | null {
+  const pool = spinCatalogPool(catalog, settings);
+  if (!pool.length) return null;
+  const reelSeed = Math.abs(seed % 2_147_483_647);
+  const loopLength = Math.min(10, Math.max(4, pool.length));
+  const baseItems: CatalogClubSeason[] = [];
+  for (let index = 0; index < loopLength; index += 1) {
+    const previous = baseItems.at(-1);
+    const item = deterministicSpinItem(
+      pool,
+      reelSeed + seat * 271 + turn * 853 + index * 47,
+      new Set(previous ? [previous.id] : []),
+      previous ? [previous] : [],
+    );
+    if (item) baseItems.push(item);
+  }
+  if (!baseItems.length) return null;
+  return {
+    items: [...baseItems, ...baseItems],
+    loopLength: baseItems.length,
+  };
 }
 
 function fallbackProjection(rating: number | null | undefined): SeasonProjection {
@@ -1067,8 +1189,9 @@ function simulateSeason(
   seat: number,
 ): SeasonResult {
   const strength = rating ?? 70;
-  const firstNoise = seededNoise(seed + seat * 97);
-  const secondNoise = seededNoise(seed + seat * 211 + 17);
+  const simulationSeed = Math.abs(seed % 2_147_483_647);
+  const firstNoise = seededNoise(simulationSeed + seat * 97);
+  const secondNoise = seededNoise(simulationSeed + seat * 211 + 17);
   const wins = Math.max(
     3,
     Math.min(34, Math.round(12 + (strength - 70) * 0.88 + (firstNoise - 0.5) * 5)),
@@ -1469,33 +1592,51 @@ function ClubShield({
 }
 
 function ClubSeasonReel({ animation }: { animation: SpinAnimation }) {
+  const settled = animation.phase === "settled";
+  const selected = animation.selected;
   const style = {
-    "--reel-index": animation.items.length - 1,
+    "--reel-index": animation.landingIndex,
+    "--reel-loop-offset": `-${(animation.loopLength ?? 0) * 72}px`,
     "--reel-duration": animation.reducedMotion ? "180ms" : "3.25s",
-    "--season-delay": animation.reducedMotion ? "0ms" : "180ms",
+    "--season-delay":
+      animation.phase === "pending" || animation.reducedMotion
+        ? "0ms"
+        : "180ms",
   } as CSSProperties;
   return (
-    <div className="reel-state" key={animation.key} style={style}>
+    <div
+      className={`reel-state reel-${animation.phase}`}
+      key={animation.key}
+      style={style}
+    >
       <div className="round-label">
-        KOTAČ {String(animation.selected.turn + 1).padStart(2, "0")}
+        KOTAČ {String(animation.round + 1).padStart(2, "0")}
       </div>
       <p className="eyebrow">KLUB × TOČNA SEZONA</p>
-      <h2>Kotač se vrti…</h2>
-      <div
-        className="club-season-reel"
-        aria-live="polite"
-        aria-label={`Izvlačenje: ${animation.selected.club.name}, ${animation.selected.season.label}`}
-      >
+      <h2>{settled ? "Izvučeno!" : "Kotač se vrti…"}</h2>
+      <div className="club-season-reel" aria-hidden="true">
         <div className="reel-column club-column">
           <span className="reel-caption">KLUB</span>
           <div className="reel-viewport">
             <div className="reel-track">
-              {animation.items.map((item, index) => (
-                <div className="reel-item club-reel-item" key={`${item.id}-${index}`}>
-                  <ClubShield club={item.club} compact />
-                  <strong>{item.club.name}</strong>
-                </div>
-              ))}
+              {animation.items.map((item, index) => {
+                const itemState = settled
+                  ? index === animation.landingIndex
+                    ? " is-selected"
+                    : Math.abs(index - animation.landingIndex) === 1
+                      ? " is-neighbor"
+                      : ""
+                  : "";
+                return (
+                  <div
+                    className={`reel-item club-reel-item${itemState}`}
+                    key={`${item.id}-${index}`}
+                  >
+                    <ClubShield club={item.club} compact />
+                    <strong>{item.club.name}</strong>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1506,17 +1647,31 @@ function ClubSeasonReel({ animation }: { animation: SpinAnimation }) {
           <span className="reel-caption">SEZONA</span>
           <div className="reel-viewport">
             <div className="reel-track">
-              {animation.items.map((item, index) => (
-                <div className="reel-item season-reel-item" key={`${item.id}-s-${index}`}>
-                  <strong>{item.season.label}</strong>
-                </div>
-              ))}
+              {animation.items.map((item, index) => {
+                const itemState = settled
+                  ? index === animation.landingIndex
+                    ? " is-selected"
+                    : Math.abs(index - animation.landingIndex) === 1
+                      ? " is-neighbor"
+                      : ""
+                  : "";
+                return (
+                  <div
+                    className={`reel-item season-reel-item${itemState}`}
+                    key={`${item.id}-s-${index}`}
+                  >
+                    <strong>{item.season.label}</strong>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
-      <p className="reel-lock-copy">
-        Zaključavamo klub, zatim sezonu. Sastav se otvara nakon zaustavljanja.
+      <p className="reel-lock-copy" role="status" aria-live="polite">
+        {settled && selected
+          ? `Izvučeno: ${selected.club.name} · ${selected.season.label}.`
+          : "Čekamo potvrdu poslužitelja. Kotač ostaje u pokretu."}
       </p>
     </div>
   );
@@ -2129,6 +2284,7 @@ export default function HnlDraftGame() {
   const [simulationSpeed, setSimulationSpeed] =
     useState<SimulationSpeed>("normal");
   const activeMatchRef = useRef({ key: "", minute: 0 });
+  const spinRequestInFlightRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -2351,6 +2507,18 @@ export default function HnlDraftGame() {
           : "home"
     : screen;
 
+  const acceptRoomState = useCallback((nextRoom: Room) => {
+    setRoom((currentRoom) => {
+      if (
+        currentRoom?.code === nextRoom.code &&
+        currentRoom.version > nextRoom.version
+      ) {
+        return currentRoom;
+      }
+      return nextRoom;
+    });
+  }, []);
+
   const refreshRoom = useCallback(async () => {
     if (!room || !participantToken) return;
     try {
@@ -2359,13 +2527,13 @@ export default function HnlDraftGame() {
         {},
         participantToken,
       );
-      setRoom(refreshed);
+      acceptRoomState(refreshed);
     } catch (refreshError) {
       if (refreshError instanceof ApiError && refreshError.code === "room_expired") {
         setError("Soba je istekla. Pokreni novu igru.");
       }
     }
-  }, [participantToken, room]);
+  }, [acceptRoomState, participantToken, room]);
 
   useEffect(() => {
     if (
@@ -2816,7 +2984,15 @@ export default function HnlDraftGame() {
 
   const spin = useCallback(
     async (reroll = false) => {
-      if (!room || !me || !participantToken || busy) return;
+      if (
+        !room ||
+        !me ||
+        !participantToken ||
+        busy ||
+        spinRequestInFlightRef.current
+      ) {
+        return;
+      }
       if (
         room.settings.draftMode === "position-first" &&
         !reroll &&
@@ -2825,47 +3001,176 @@ export default function HnlDraftGame() {
         setError("Prvo odaberi praznu poziciju na terenu.");
         return;
       }
+      spinRequestInFlightRef.current = true;
       clearMessages();
       setBusy(true);
       try {
-        const payload: Record<string, unknown> = {
-          expectedVersion: room.version,
-          expectedTurn: me.turn,
-          reroll,
-        };
-        if (room.settings.draftMode === "position-first" && !reroll) {
-          payload.slotId = lockedSlotId;
+        const roomCode = room.code;
+        const initialTurn = me.turn;
+        const initialSpinIdentity = spinIdentity(me.currentSpin);
+        const initialRerollsRemaining = me.rerollsRemaining;
+        let requestRoom = room;
+        let requestManager = me;
+        let nextRoom: Room | null = null;
+        let animationCatalog = catalog;
+        if (!animationCatalog?.clubSeasons?.length) {
+          try {
+            animationCatalog =
+              await apiRequest<CatalogInventory>("/catalog");
+            setCatalog(animationCatalog);
+          } catch {
+            // The spin can still complete if the decorative reel catalog is
+            // temporarily unavailable.
+          }
         }
-        const nextRoom = await apiRequest<Room>(
-          `/rooms/${room.code}/spin`,
-          { method: "POST", body: JSON.stringify(payload) },
-          participantToken,
-        );
-        setRoom(nextRoom);
+        const reducedMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        if (animationCatalog) {
+          const pendingStrip = buildPendingSpinItems(
+            animationCatalog,
+            room.settings,
+            room.seed,
+            me.seat,
+            me.turn,
+          );
+          if (pendingStrip) {
+            setSpinAnimation({
+              key: `pending-${room.code}-${me.id}-${me.turn}-${Date.now()}`,
+              items: pendingStrip.items,
+              landingIndex: 0,
+              loopLength: pendingStrip.loopLength,
+              phase: "pending",
+              round: me.turn,
+              selected: null,
+              reducedMotion,
+            });
+          }
+        }
+
+        for (let attempt = 0; ; attempt += 1) {
+          const payload: Record<string, unknown> = {
+            expectedVersion: requestRoom.version,
+            expectedTurn: requestManager.turn,
+            reroll,
+          };
+          if (requestRoom.settings.draftMode === "position-first" && !reroll) {
+            payload.slotId = lockedSlotId;
+          }
+
+          try {
+            nextRoom = await apiRequest<Room>(
+              `/rooms/${room.code}/spin`,
+              { method: "POST", body: JSON.stringify(payload) },
+              participantToken,
+            );
+            acceptRoomState(nextRoom);
+            break;
+          } catch (requestError) {
+            if (
+              !(requestError instanceof ApiError) ||
+              !SPIN_CONFLICT_CODES.has(requestError.code)
+            ) {
+              throw requestError;
+            }
+
+            const freshRoom = await apiRequest<Room>(
+              `/rooms/${roomCode}`,
+              {},
+              participantToken,
+            );
+            acceptRoomState(freshRoom);
+            const freshManager = freshRoom.participants.find(
+              (participant) => participant.id === participantId,
+            );
+            if (!freshManager) {
+              throw new ApiError(
+                "Tvoja momčad više nije dostupna u ovoj sobi.",
+                "participant_not_found",
+                404,
+              );
+            }
+
+            const freshSpinIdentity = spinIdentity(freshManager.currentSpin);
+            const simultaneousSpinCompleted = reroll
+              ? freshManager.turn === initialTurn &&
+                Boolean(freshSpinIdentity) &&
+                (freshSpinIdentity !== initialSpinIdentity ||
+                  freshManager.rerollsRemaining < initialRerollsRemaining)
+              : freshManager.turn === initialTurn &&
+                Boolean(
+                  freshSpinIdentity &&
+                    freshSpinIdentity !== initialSpinIdentity,
+                );
+            if (simultaneousSpinCompleted) {
+              nextRoom = freshRoom;
+              break;
+            }
+
+            const requestedSlotWasFilled =
+              !reroll &&
+              freshRoom.settings.draftMode === "position-first" &&
+              Boolean(
+                lockedSlotId &&
+                  freshManager.filledSlotIds.includes(lockedSlotId),
+              );
+            const terminalState =
+              freshRoom.status !== "drafting" ||
+              freshManager.status !== "drafting" ||
+              freshManager.turn !== initialTurn ||
+              requestedSlotWasFilled ||
+              (reroll &&
+                (!freshManager.currentSpin ||
+                  freshManager.rerollsRemaining <= 0));
+            if (terminalState) {
+              setSpinAnimation(null);
+              return;
+            }
+
+            requestRoom = freshRoom;
+            requestManager = freshManager;
+            const retryDelay =
+              SPIN_CONFLICT_RETRY_DELAYS_MS[
+                Math.min(
+                  attempt,
+                  SPIN_CONFLICT_RETRY_DELAYS_MS.length - 1,
+                )
+              ];
+            await waitForRetry(retryDelay);
+          }
+        }
+
+        if (!nextRoom) {
+          setSpinAnimation(null);
+          return;
+        }
         setSelectedPlayerId(null);
         const nextManager = nextRoom.participants.find(
           (participant) => participant.id === participantId,
         );
         const selectedSpin = nextManager?.currentSpin;
         if (selectedSpin) {
-          const reducedMotion = window.matchMedia(
-            "(prefers-reduced-motion: reduce)",
-          ).matches;
+          const settledStrip = buildSpinItems(
+            animationCatalog,
+            selectedSpin,
+            nextRoom.settings,
+            nextRoom.seed,
+            nextManager.seat,
+          );
           setSpinAnimation({
-            key: `${selectedSpin.turn}-${selectedSpin.spinNumber}-${selectedSpin.clubSeasonId}`,
-            items: buildSpinItems(
-              catalog,
-              selectedSpin,
-              nextRoom.settings,
-              nextRoom.seed,
-              nextManager.seat,
-            ),
+            key: `settled-${selectedSpin.turn}-${selectedSpin.spinNumber}-${selectedSpin.clubSeasonId}`,
+            items: settledStrip.items,
+            landingIndex: settledStrip.landingIndex,
+            phase: "settled",
+            round: selectedSpin.turn,
             selected: selectedSpin,
             reducedMotion,
           });
           await new Promise((resolve) =>
-            window.setTimeout(resolve, reducedMotion ? 220 : 3650),
+            window.setTimeout(resolve, reducedMotion ? 1_000 : 4_700),
           );
+          setSpinAnimation(null);
+        } else {
           setSpinAnimation(null);
         }
       } catch (spinError) {
@@ -2873,10 +3178,12 @@ export default function HnlDraftGame() {
         setError(spinError instanceof Error ? spinError.message : "Kotač se nije zavrtio.");
         await refreshRoom();
       } finally {
+        spinRequestInFlightRef.current = false;
         setBusy(false);
       }
     },
     [
+      acceptRoomState,
       busy,
       catalog,
       lockedSlotId,

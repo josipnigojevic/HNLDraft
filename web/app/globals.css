@@ -1946,6 +1946,15 @@ select:focus-visible,
   animation-delay: var(--season-delay);
 }
 
+.reel-pending .reel-track {
+  animation: clubReelLoop 620ms linear infinite;
+  filter: blur(0.8px);
+}
+
+.reel-pending .season-column .reel-track {
+  animation-delay: 0ms;
+}
+
 .reel-item {
   align-items: center;
   color: #87958e;
@@ -1953,6 +1962,21 @@ select:focus-visible,
   height: 72px;
   justify-content: center;
   opacity: 0.48;
+  transition:
+    color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.reel-settled .reel-item.is-neighbor {
+  color: #9eaaa4;
+  opacity: 0.72;
+}
+
+.reel-settled .reel-item.is-selected {
+  color: var(--white);
+  opacity: 1;
+  transform: scale(1.025);
 }
 
 .club-reel-item {
@@ -4707,6 +4731,16 @@ select:focus-visible,
   }
 }
 
+@keyframes clubReelLoop {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(var(--reel-loop-offset));
+  }
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -5601,6 +5635,12 @@ select:focus-visible,
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .reel-pending .reel-track {
+    animation: none !important;
+    filter: none;
+    transform: translateY(0);
   }
 }
 

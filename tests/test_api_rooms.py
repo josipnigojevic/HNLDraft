@@ -770,7 +770,7 @@ class RoomStoreTests(unittest.TestCase):
         self.assertEqual(expired.exception.status, 410)
         self.assertEqual(expired.exception.code, "room_expired")
 
-    def test_concurrent_same_version_spin_commits_once(self) -> None:
+    def test_concurrent_same_participant_spin_is_idempotent(self) -> None:
         created = self.create()
         room = self.store.start_room(
             created["roomCode"],
@@ -779,17 +779,22 @@ class RoomStoreTests(unittest.TestCase):
         )
         barrier = threading.Barrier(3)
         outcomes: list[str] = []
+        spins: list[tuple[str, int]] = []
 
         def worker() -> None:
             barrier.wait()
             try:
-                self.store.spin(
+                result = self.store.spin(
                     created["roomCode"],
                     created["participantToken"],
                     room["version"],
                     0,
                 )
                 outcomes.append("ok")
+                current = self.own_participant(result)["currentSpin"]
+                spins.append(
+                    (current["clubSeasonId"], current["spinNumber"])
+                )
             except api_rooms.RequestError as error:
                 outcomes.append(error.code)
 
@@ -799,7 +804,74 @@ class RoomStoreTests(unittest.TestCase):
         barrier.wait()
         for thread in threads:
             thread.join()
-        self.assertCountEqual(outcomes, ["ok", "version_conflict"])
+        self.assertEqual(outcomes, ["ok", "ok"])
+        self.assertEqual(len(set(spins)), 1)
+        self.assertEqual(spins[0][1], 1)
+        fetched = self.store.get_room(
+            created["roomCode"],
+            created["participantToken"],
+        )
+        self.assertEqual(fetched["version"], room["version"] + 1)
+        self.assertEqual(
+            self.own_participant(fetched)["currentSpin"]["spinNumber"],
+            1,
+        )
+
+    def test_concurrent_participant_spins_ignore_unrelated_room_version(self) -> None:
+        created = self.create(mode="live", max_players=2)
+        joined = self.store.join_room(
+            created["roomCode"],
+            {"name": "Guest"},
+        )
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            joined["room"]["version"],
+        )
+        barrier = threading.Barrier(3)
+        outcomes: list[str] = []
+
+        def worker(token: str) -> None:
+            barrier.wait()
+            try:
+                self.store.spin(
+                    created["roomCode"],
+                    token,
+                    room["version"],
+                    0,
+                )
+                outcomes.append("ok")
+            except api_rooms.RequestError as error:
+                outcomes.append(error.code)
+
+        threads = [
+            threading.Thread(
+                target=worker,
+                args=(created["participantToken"],),
+            ),
+            threading.Thread(
+                target=worker,
+                args=(joined["participantToken"],),
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(outcomes, ["ok", "ok"])
+        host_view = self.store.get_room(
+            created["roomCode"],
+            created["participantToken"],
+        )
+        guest_view = self.store.get_room(
+            created["roomCode"],
+            joined["participantToken"],
+        )
+        self.assertIsNotNone(self.own_participant(host_view)["currentSpin"])
+        self.assertIsNotNone(self.own_participant(guest_view)["currentSpin"])
+        self.assertEqual(host_view["version"], room["version"] + 2)
 
     def test_account_password_session_and_generic_auth_failures(self) -> None:
         registered, session_token = self.store.register_account(

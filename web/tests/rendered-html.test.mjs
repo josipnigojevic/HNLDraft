@@ -80,6 +80,10 @@ test("keeps room flows, disclosures, and accessible structure in source", async 
   assert.doesNotMatch(page, /Seed \$\{room\.seed\}/);
   assert.match(layout, /<html lang="hr">/);
   assert.match(css, /@keyframes clubReelStop/);
+  assert.match(css, /@keyframes clubReelLoop/);
+  assert.match(css, /\.reel-pending \.reel-track/);
+  assert.match(css, /\.reel-settled \.reel-item\.is-selected/);
+  assert.match(css, /\.reel-settled \.reel-item\.is-neighbor/);
   assert.match(css, /grid-template-areas:\s*"club times season"/);
   assert.match(css, /\.matchweek-console/);
   assert.match(css, /\.match-card\.featured/);
@@ -117,6 +121,62 @@ test("ships cookie-authenticated accounts with durable season history", async ()
   assert.match(css, /\.account-stat-grid/);
   assert.match(css, /\.account-season-list/);
   assert.match(css, /\.history-pitch-player/);
+});
+
+test("retries simultaneous stale spins without duplicate submissions", async () => {
+  const page = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    page,
+    /SPIN_CONFLICT_CODES = new Set\(\["version_conflict", "turn_conflict"\]\)/,
+  );
+  assert.match(
+    page,
+    /SPIN_CONFLICT_RETRY_DELAYS_MS = \[90, 180, 360, 720\]/,
+  );
+  assert.match(page, /spinRequestInFlightRef\.current/);
+  assert.match(page, /SPIN_CONFLICT_CODES\.has\(requestError\.code\)/);
+  assert.match(page, /const freshRoom = await apiRequest<Room>/);
+  assert.match(page, /acceptRoomState\(freshRoom\)/);
+  assert.match(page, /const simultaneousSpinCompleted = reroll/);
+  assert.match(page, /const terminalState =/);
+  assert.match(page, /for \(let attempt = 0; ; attempt \+= 1\)/);
+  assert.match(page, /Math\.min\(\s*attempt,\s*SPIN_CONFLICT_RETRY_DELAYS_MS\.length - 1/);
+  assert.match(page, /await waitForRetry\(retryDelay\)/);
+  assert.match(page, /throw requestError/);
+  assert.doesNotMatch(page, /"spin_retry_exhausted"/);
+  assert.doesNotMatch(
+    page,
+    /setError\(requestError instanceof Error \? requestError\.message/,
+  );
+});
+
+test("keeps the reel moving while waiting and shows distinct rows after landing", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /function buildPendingSpinItems/);
+  assert.match(page, /const reelSeed = Math\.abs\(seed % 2_147_483_647\)/);
+  assert.match(page, /const landingIndex = 17/);
+  assert.match(page, /for \(let index = 0; index < 2; index \+= 1\)/);
+  assert.match(page, /const avoidedNeighbors = \[selectedItem, \.\.\.previousTailItems\]/);
+  assert.match(page, /"--reel-index": animation\.landingIndex/);
+  assert.doesNotMatch(
+    page,
+    /"--reel-index": animation\.items\.length - 1/,
+  );
+  assert.match(page, /phase: "pending"/);
+  assert.match(page, /phase: "settled"/);
+  assert.match(page, /loopLength: pendingStrip\.loopLength/);
+  assert.match(page, /Čekamo potvrdu poslužitelja\. Kotač ostaje u pokretu\./);
+  assert.match(page, /window\.setTimeout\(resolve, reducedMotion \? 1_000 : 4_700\)/);
+  assert.match(css, /animation: clubReelLoop 620ms linear infinite/);
+  assert.match(css, /transform: translateY\(var\(--reel-loop-offset\)\)/);
 });
 
 test("ships a validated local crest for every catalog club identity", async () => {
