@@ -753,6 +753,133 @@ class RoomStoreTests(unittest.TestCase):
         self.assertIn(to_slot, participant["filledSlotIds"])
         self.assertNotIn(from_slot, participant["filledSlotIds"])
 
+    def test_concurrent_participant_moves_ignore_unrelated_room_version(self) -> None:
+        created = self.create(mode="live", target_picks=2, max_players=2)
+        joined = self.store.join_room(
+            created["roomCode"],
+            {"name": "Guest"},
+        )
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            joined["room"]["version"],
+        )
+        move_requests: list[tuple[str, str, str]] = []
+        for token in (
+            created["participantToken"],
+            joined["participantToken"],
+        ):
+            room = self.store.spin(
+                created["roomCode"],
+                token,
+                room["version"],
+                0,
+            )
+            participant = self.own_participant(room)
+            versatile = next(
+                player
+                for player in participant["currentSpin"]["players"]
+                if len(player["eligibleSlotIds"]) >= 2
+            )
+            from_slot, to_slot = versatile["eligibleSlotIds"][:2]
+            room = self.store.pick(
+                created["roomCode"],
+                token,
+                room["version"],
+                0,
+                versatile["id"],
+                from_slot,
+            )
+            move_requests.append((token, from_slot, to_slot))
+
+        shared_version = room["version"]
+        barrier = threading.Barrier(3)
+        outcomes: list[str] = []
+
+        def worker(token: str, from_slot: str, to_slot: str) -> None:
+            barrier.wait()
+            try:
+                self.store.move(
+                    created["roomCode"],
+                    token,
+                    shared_version,
+                    from_slot,
+                    to_slot,
+                )
+                outcomes.append("ok")
+            except api_rooms.RequestError as error:
+                outcomes.append(error.code)
+
+        threads = [
+            threading.Thread(target=worker, args=request)
+            for request in move_requests
+        ]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(outcomes, ["ok", "ok"])
+        self.assertEqual(
+            self.store.get_room(
+                created["roomCode"],
+                created["participantToken"],
+            )["version"],
+            shared_version + 2,
+        )
+        for token, from_slot, to_slot in move_requests:
+            view = self.store.get_room(created["roomCode"], token)
+            participant = self.own_participant(view)
+            self.assertIn(to_slot, participant["filledSlotIds"])
+            self.assertNotIn(from_slot, participant["filledSlotIds"])
+
+    def test_stale_same_participant_lineup_move_is_rejected(self) -> None:
+        created = self.create(target_picks=2)
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            created["room"]["version"],
+        )
+        room = self.store.spin(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+        )
+        participant = self.own_participant(room)
+        versatile = next(
+            player
+            for player in participant["currentSpin"]["players"]
+            if len(player["eligibleSlotIds"]) >= 2
+        )
+        from_slot, to_slot = versatile["eligibleSlotIds"][:2]
+        room = self.store.pick(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+            versatile["id"],
+            from_slot,
+        )
+        before_move_version = room["version"]
+        self.store.move(
+            created["roomCode"],
+            created["participantToken"],
+            before_move_version,
+            from_slot,
+            to_slot,
+        )
+        with self.assertRaises(api_rooms.RequestError) as stale:
+            self.store.move(
+                created["roomCode"],
+                created["participantToken"],
+                before_move_version,
+                to_slot,
+                from_slot,
+            )
+        self.assertEqual(stale.exception.code, "version_conflict")
+
     def test_expired_room_is_visible_but_cannot_mutate(self) -> None:
         created = self.create()
         self.clock.value += 61
@@ -872,6 +999,151 @@ class RoomStoreTests(unittest.TestCase):
         self.assertIsNotNone(self.own_participant(host_view)["currentSpin"])
         self.assertIsNotNone(self.own_participant(guest_view)["currentSpin"])
         self.assertEqual(host_view["version"], room["version"] + 2)
+
+    def test_concurrent_participant_picks_ignore_unrelated_room_version(self) -> None:
+        created = self.create(mode="live", max_players=2)
+        joined = self.store.join_room(
+            created["roomCode"],
+            {"name": "Guest"},
+        )
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            joined["room"]["version"],
+        )
+        host_spin = self.store.spin(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+        )
+        guest_spin = self.store.spin(
+            created["roomCode"],
+            joined["participantToken"],
+            host_spin["version"],
+            0,
+        )
+        host_player, host_slot = self.first_available(host_spin)
+        guest_player, guest_slot = self.first_available(guest_spin)
+        shared_version = guest_spin["version"]
+        barrier = threading.Barrier(3)
+        outcomes: list[str] = []
+
+        def worker(token: str, player_id: str, slot_id: str) -> None:
+            barrier.wait()
+            try:
+                self.store.pick(
+                    created["roomCode"],
+                    token,
+                    shared_version,
+                    0,
+                    player_id,
+                    slot_id,
+                )
+                outcomes.append("ok")
+            except api_rooms.RequestError as error:
+                outcomes.append(error.code)
+
+        threads = [
+            threading.Thread(
+                target=worker,
+                args=(
+                    created["participantToken"],
+                    host_player["id"],
+                    host_slot,
+                ),
+            ),
+            threading.Thread(
+                target=worker,
+                args=(
+                    joined["participantToken"],
+                    guest_player["id"],
+                    guest_slot,
+                ),
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(outcomes, ["ok", "ok"])
+        host_view = self.store.get_room(
+            created["roomCode"],
+            created["participantToken"],
+        )
+        guest_view = self.store.get_room(
+            created["roomCode"],
+            joined["participantToken"],
+        )
+        self.assertEqual(host_view["version"], shared_version + 2)
+        for view in (host_view, guest_view):
+            participant = self.own_participant(view)
+            self.assertEqual(participant["turn"], 1)
+            self.assertEqual(len(participant["picks"]), 1)
+            self.assertIsNone(participant["currentSpin"])
+
+    def test_concurrent_same_participant_pick_is_idempotent(self) -> None:
+        created = self.create()
+        room = self.store.start_room(
+            created["roomCode"],
+            created["participantToken"],
+            created["room"]["version"],
+        )
+        room = self.store.spin(
+            created["roomCode"],
+            created["participantToken"],
+            room["version"],
+            0,
+        )
+        player, slot_id = self.first_available(room)
+        shared_version = room["version"]
+        barrier = threading.Barrier(3)
+        outcomes: list[str] = []
+
+        def worker() -> None:
+            barrier.wait()
+            try:
+                self.store.pick(
+                    created["roomCode"],
+                    created["participantToken"],
+                    shared_version,
+                    0,
+                    player["id"],
+                    slot_id,
+                )
+                outcomes.append("ok")
+            except api_rooms.RequestError as error:
+                outcomes.append(error.code)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(outcomes, ["ok", "ok"])
+        fetched = self.store.get_room(
+            created["roomCode"],
+            created["participantToken"],
+        )
+        participant = self.own_participant(fetched)
+        self.assertEqual(fetched["version"], shared_version + 1)
+        self.assertEqual(participant["turn"], 1)
+        self.assertEqual(len(participant["picks"]), 1)
+        self.assertEqual(participant["picks"][0]["player"]["id"], player["id"])
+        with self.assertRaises(api_rooms.RequestError) as conflicting_retry:
+            self.store.pick(
+                created["roomCode"],
+                created["participantToken"],
+                shared_version,
+                0,
+                player["id"],
+                "different-slot",
+            )
+        self.assertEqual(conflicting_retry.exception.code, "turn_conflict")
 
     def test_account_password_session_and_generic_auth_failures(self) -> None:
         registered, session_token = self.store.register_account(
@@ -1216,6 +1488,7 @@ class AccountSchemaMigrationTests(unittest.TestCase):
             finally:
                 migrated.close()
             self.assertIn("account_id", columns)
+            self.assertIn("lineup_version", columns)
             self.assertIn("accounts", tables)
             self.assertIn("auth_sessions", tables)
             self.assertIn("season_history", tables)

@@ -43,11 +43,13 @@ Default HTTP contract (JSON request/response bodies):
       {"participantToken":"..."}
 
 The participant token can instead be sent as ``Authorization: Bearer ...`` or
-``X-Participant-Token``. State-changing draft actions validate the room
-version and that manager's turn, except that an ordinary first spin is
-participant-local and idempotent: unrelated room updates do not invalidate it,
-and retrying after a lost response returns the already committed spin. Rerolls
-keep strict room-version validation because they consume a limited resource.
+``X-Participant-Token``. Participant-local first spins, picks, and lineup moves
+do not reject an otherwise valid action merely because another manager
+advanced the room-wide version. Retrying an ordinary spin or the exact same
+pick after a lost response is idempotent. Lineup moves retain a participant
+revision guard, while rerolls and genuinely room-wide mutations keep strict
+room-version validation because they consume a limited resource or change
+shared state.
 Random club-season spins are derived from the room seed, seat number, draft
 turn, and spin number, making them reproducible without trusting the browser.
 
@@ -1448,6 +1450,7 @@ class RoomStore:
                         REFERENCES accounts(id) ON DELETE SET NULL,
                     joined_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
+                    lineup_version INTEGER NOT NULL DEFAULT 0,
                     UNIQUE(room_code, seat)
                 );
 
@@ -1504,6 +1507,16 @@ class RoomStore:
                     connection.execute(
                         "ALTER TABLE participants ADD COLUMN account_id TEXT "
                         "REFERENCES accounts(id) ON DELETE SET NULL"
+                    )
+                if "lineup_version" not in participant_columns:
+                    connection.execute(
+                        "ALTER TABLE participants ADD COLUMN lineup_version "
+                        "INTEGER NOT NULL DEFAULT 0"
+                    )
+                    connection.execute(
+                        "UPDATE participants SET lineup_version = COALESCE("
+                        "(SELECT version FROM rooms "
+                        "WHERE rooms.code = participants.room_code), 0)"
                     )
                 account_columns = {
                     row["name"]
@@ -3921,10 +3934,40 @@ class RoomStore:
     ) -> dict[str, Any]:
         with self._transaction() as connection:
             room = self._room_row(connection, code, mutation=True)
-            self._check_version(room, expected_version)
+            if not _is_int(expected_version):
+                raise RequestError(
+                    400,
+                    "expected_version_required",
+                    "expectedVersion must be the latest integer room version.",
+                )
+            # A pick consumes only this participant's current spin and turn.
+            # Another manager can legitimately advance the shared room version
+            # between this manager rendering the squad and submitting a pick,
+            # so expectedTurn/currentSpin are the authoritative concurrency
+            # boundary here.
             participant = self._participant_by_token(
                 connection, room["code"], token
             )
+            if (
+                _is_int(expected_turn)
+                and expected_turn < participant["turn_index"]
+                and isinstance(player_season_id, str)
+                and isinstance(slot_id, str)
+            ):
+                committed = connection.execute(
+                    "SELECT player_season_id, slot_id FROM picks "
+                    "WHERE participant_id = ? AND turn_index = ?",
+                    (participant["id"], expected_turn),
+                ).fetchone()
+                if (
+                    committed
+                    and committed["player_season_id"] == player_season_id
+                    and committed["slot_id"] == slot_id
+                ):
+                    # The first request committed but its response may have
+                    # been lost. Return current authoritative state without
+                    # inserting a second pick or advancing the room version.
+                    return self._room_view(connection, room, participant)
             self._check_turn(participant, expected_turn)
             if room["status"] != "drafting" or participant["status"] != "drafting":
                 raise RequestError(
@@ -4091,10 +4134,23 @@ class RoomStore:
             )
         with self._transaction() as connection:
             room = self._room_row(connection, code, mutation=True)
-            self._check_version(room, expected_version)
+            if not _is_int(expected_version):
+                raise RequestError(
+                    400,
+                    "expected_version_required",
+                    "expectedVersion must be the latest integer room version.",
+                )
             participant = self._participant_by_token(
                 connection, room["code"], token
             )
+            if (
+                expected_version > room["version"]
+                or participant["lineup_version"] > expected_version
+            ):
+                # Reject a stale/future request if this manager's own lineup
+                # changed since the rendered state. A lower room version is
+                # otherwise safe: only another participant advanced it.
+                self._check_version(room, expected_version)
             if room["status"] != "drafting":
                 raise RequestError(
                     409,
@@ -4186,8 +4242,9 @@ class RoomStore:
                     ),
                 )
             connection.execute(
-                "UPDATE participants SET updated_at = ? WHERE id = ?",
-                (now, participant["id"]),
+                "UPDATE participants SET updated_at = ?, lineup_version = ? "
+                "WHERE id = ?",
+                (now, room["version"] + 1, participant["id"]),
             )
             self._touch_room(connection, room["code"])
             room = self._room_row(connection, room["code"], mutation=False)

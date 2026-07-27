@@ -430,6 +430,12 @@ const API_BASE = (
 
 const SPIN_CONFLICT_CODES = new Set(["version_conflict", "turn_conflict"]);
 const SPIN_CONFLICT_RETRY_DELAYS_MS = [90, 180, 360, 720] as const;
+const ROOM_MUTATION_CONFLICT_CODES = new Set([
+  "version_conflict",
+  "turn_conflict",
+]);
+const ROOM_MUTATION_RETRY_DELAYS_MS = [90, 180, 360, 720, 1_000] as const;
+const ACTIVE_ROOM_MUTATIONS = new Set<string>();
 
 const FORMATIONS = [
   "4-3-3",
@@ -719,6 +725,16 @@ function waitForRetry(delayMs: number) {
   });
 }
 
+function beginRoomMutation(key: string) {
+  if (ACTIVE_ROOM_MUTATIONS.has(key)) return false;
+  ACTIVE_ROOM_MUTATIONS.add(key);
+  return true;
+}
+
+function finishRoomMutation(key: string) {
+  ACTIVE_ROOM_MUTATIONS.delete(key);
+}
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -752,6 +768,86 @@ async function apiRequest<T>(
     );
   }
   return payload as T;
+}
+
+type RetriedRoomMutationOptions = {
+  initialRoom: Room;
+  path: string;
+  token: string;
+  buildPayload: (latestRoom: Room) => Record<string, unknown>;
+  acceptRoomState: (latestRoom: Room) => void;
+  isApplied?: (latestRoom: Room) => boolean;
+  canRetry?: (latestRoom: Room) => boolean;
+};
+
+async function mutateRoomWithRetry({
+  initialRoom,
+  path,
+  token,
+  buildPayload,
+  acceptRoomState,
+  isApplied = () => false,
+  canRetry = () => true,
+}: RetriedRoomMutationOptions): Promise<Room> {
+  let requestRoom = initialRoom;
+
+  for (
+    let attempt = 0;
+    attempt <= ROOM_MUTATION_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    try {
+      const nextRoom = await apiRequest<Room>(
+        path,
+        {
+          method: "POST",
+          body: JSON.stringify(buildPayload(requestRoom)),
+        },
+        token,
+      );
+      acceptRoomState(nextRoom);
+      return nextRoom;
+    } catch (requestError) {
+      const retryableConflict =
+        requestError instanceof ApiError &&
+        requestError.status === 409 &&
+        ROOM_MUTATION_CONFLICT_CODES.has(requestError.code);
+      if (!retryableConflict) throw requestError;
+
+      const freshRoom = await apiRequest<Room>(
+        `/rooms/${initialRoom.code}`,
+        {},
+        token,
+      );
+      acceptRoomState(freshRoom);
+
+      // A lost response or the same action from another device may already
+      // have committed. Treat that state as success instead of submitting the
+      // action twice (especially important for swaps).
+      if (isApplied(freshRoom)) return freshRoom;
+      if (!canRetry(freshRoom)) {
+        throw new ApiError(
+          "Radnja više nije dostupna jer se stanje tvoje momčadi promijenilo.",
+          "room_mutation_superseded",
+          409,
+        );
+      }
+      if (attempt >= ROOM_MUTATION_RETRY_DELAYS_MS.length) {
+        throw new ApiError(
+          "Soba je trenutačno zauzeta. Pokušaj ponovno za trenutak.",
+          "room_mutation_retry_exhausted",
+          409,
+        );
+      }
+
+      requestRoom = freshRoom;
+      await waitForRetry(ROOM_MUTATION_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  // The bounded loop always returns or throws. This keeps TypeScript aware of
+  // that invariant if the retry schedule is ever changed.
+  throw new ApiError("Zahtjev nije dovršen.", "room_mutation_retry_exhausted", 409);
 }
 
 function formatNumber(value: number | undefined, fallback: string) {
@@ -1301,10 +1397,10 @@ function Header({
     account?.displayName?.trim() || account?.username || "Prijava";
   return (
     <header className="topbar">
-      <button className="brand" onClick={onHome} aria-label="36–0 HNL naslovnica">
-        <span className="brand-score">36–0</span>
+      <button className="brand" onClick={onHome} aria-label="SHNL 36-0 naslovnica">
+        <span className="brand-score">SHNL</span>
         <span className="brand-meta">
-          HNL DRAFT
+          36-0
           <small>KLUB × SEZONA</small>
         </span>
       </button>
@@ -1384,7 +1480,7 @@ function AccountDialog({
         >
           ×
         </button>
-        <p className="eyebrow">TVOJ 36–0 PROFIL</p>
+        <p className="eyebrow">TVOJ SHNL 36-0 PROFIL</p>
         <h2 id="account-dialog-title">
           {registering ? "Sačuvaj svoju povijest." : "Dobrodošao natrag."}
         </h2>
@@ -1916,7 +2012,7 @@ function AccountPanel({
             onClick={onBack}
             disabled={!selectedId}
           >
-            <span>36–0</span>
+            <span>SHNL 36-0</span>
             <strong>{selectedId ? "← Povijest sezona" : "PROFIL MENADŽERA"}</strong>
           </button>
           <button
@@ -2912,15 +3008,19 @@ export default function HnlDraftGame() {
       });
       saveSession(auth);
       if (mode === "solo") {
-        const started = await apiRequest<Room>(
-          `/rooms/${auth.roomCode}/start`,
-          {
-            method: "POST",
-            body: JSON.stringify({ expectedVersion: auth.room.version }),
-          },
-          auth.participantToken,
-        );
-        setRoom(started);
+        await mutateRoomWithRetry({
+          initialRoom: auth.room,
+          path: `/rooms/${auth.roomCode}/start`,
+          token: auth.participantToken,
+          buildPayload: (latestRoom) => ({
+            expectedVersion: latestRoom.version,
+          }),
+          acceptRoomState,
+          isApplied: (latestRoom) =>
+            latestRoom.status === "drafting" ||
+            latestRoom.status === "complete",
+          canRetry: (latestRoom) => latestRoom.status === "lobby",
+        });
       }
     } catch (creationError) {
       setError(
@@ -2959,28 +3059,41 @@ export default function HnlDraftGame() {
     }
   };
 
-  const startLiveDraft = async () => {
-    if (!room || !participantToken) return;
+  const startLiveDraft = useCallback(async () => {
+    if (!room || !participantToken || busy) return;
+    const mutationKey = `${room.code}:${participantId}`;
+    if (!beginRoomMutation(mutationKey)) return;
     clearMessages();
     setBusy(true);
     try {
-      setRoom(
-        await apiRequest<Room>(
-          `/rooms/${room.code}/start`,
-          {
-            method: "POST",
-            body: JSON.stringify({ expectedVersion: room.version }),
-          },
-          participantToken,
-        ),
-      );
+      await mutateRoomWithRetry({
+        initialRoom: room,
+        path: `/rooms/${room.code}/start`,
+        token: participantToken,
+        buildPayload: (latestRoom) => ({
+          expectedVersion: latestRoom.version,
+        }),
+        acceptRoomState,
+        isApplied: (latestRoom) =>
+          latestRoom.status === "drafting" ||
+          latestRoom.status === "complete",
+        canRetry: (latestRoom) => latestRoom.status === "lobby",
+      });
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Draft nije pokrenut.");
       await refreshRoom();
     } finally {
+      finishRoomMutation(mutationKey);
       setBusy(false);
     }
-  };
+  }, [
+    acceptRoomState,
+    busy,
+    participantId,
+    participantToken,
+    refreshRoom,
+    room,
+  ]);
 
   const spin = useCallback(
     async (reroll = false) => {
@@ -3195,69 +3308,175 @@ export default function HnlDraftGame() {
     ],
   );
 
-  const pickPlayer = async (player: Player, slotId: string) => {
-    if (!room || !me || !participantToken || busy) return;
-    clearMessages();
-    setBusy(true);
-    try {
-      const nextRoom = await apiRequest<Room>(
-        `/rooms/${room.code}/pick`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            expectedVersion: room.version,
-            expectedTurn: me.turn,
+  const pickPlayer = useCallback(
+    async (player: Player, slotId: string) => {
+      if (
+        !room ||
+        !me ||
+        !participantToken ||
+        busy
+      ) {
+        return;
+      }
+      const mutationKey = `${room.code}:${participantId}`;
+      if (!beginRoomMutation(mutationKey)) return;
+      clearMessages();
+      setBusy(true);
+      const requestedTurn = me.turn;
+      const requestedSpinIdentity = spinIdentity(me.currentSpin);
+      const requestedSlotId =
+        room.settings.draftMode === "position-first"
+          ? me.currentSpin?.lockedSlotId ?? slotId
+          : slotId;
+      try {
+        await mutateRoomWithRetry({
+          initialRoom: room,
+          path: `/rooms/${room.code}/pick`,
+          token: participantToken,
+          buildPayload: (latestRoom) => ({
+            expectedVersion: latestRoom.version,
+            expectedTurn: requestedTurn,
             playerSeasonId: player.id,
-            slotId,
+            slotId: requestedSlotId,
           }),
-        },
-        participantToken,
-      );
-      setRoom(nextRoom);
-      setSelectedPlayerId(null);
-      setLockedSlotId(null);
-    } catch (pickError) {
-      setError(pickError instanceof Error ? pickError.message : "Igrač nije odabran.");
-      await refreshRoom();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const movePick = async (fromSlotId: string, toSlotId: string, swap: boolean) => {
-    if (!room || !participantToken || busy) return;
-    clearMessages();
-    setBusy(true);
-    try {
-      setRoom(
-        await apiRequest<Room>(
-          `/rooms/${room.code}/move`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              expectedVersion: room.version,
-              fromSlotId,
-              toSlotId,
-              swap,
-            }),
+          acceptRoomState,
+          isApplied: (latestRoom) => {
+            const latestManager = latestRoom.participants.find(
+              (participant) => participant.id === participantId,
+            );
+            return Boolean(
+              latestManager?.picks.some(
+                (pick) =>
+                  pick.turn === requestedTurn &&
+                  pick.player.id === player.id &&
+                  pick.slotId === requestedSlotId,
+              ),
+            );
           },
-          participantToken,
-        ),
-      );
-      setMoveFromSlotId(null);
-      setRepositioning(false);
-    } catch (moveError) {
-      setError(
-        moveError instanceof Error
-          ? moveError.message
-          : "Igrača nije moguće premjestiti.",
-      );
-      setMoveFromSlotId(null);
-      await refreshRoom();
-    } finally {
-      setBusy(false);
-    }
-  };
+          canRetry: (latestRoom) => {
+            const latestManager = latestRoom.participants.find(
+              (participant) => participant.id === participantId,
+            );
+            return Boolean(
+              latestRoom.status === "drafting" &&
+                latestManager?.status === "drafting" &&
+                latestManager.turn === requestedTurn &&
+                spinIdentity(latestManager.currentSpin) ===
+                  requestedSpinIdentity &&
+                !latestManager.filledSlotIds.includes(requestedSlotId),
+            );
+          },
+        });
+        setSelectedPlayerId(null);
+        setLockedSlotId(null);
+      } catch (pickError) {
+        setError(pickError instanceof Error ? pickError.message : "Igrač nije odabran.");
+        await refreshRoom();
+      } finally {
+        finishRoomMutation(mutationKey);
+        setBusy(false);
+      }
+    },
+    [
+      acceptRoomState,
+      busy,
+      me,
+      participantId,
+      participantToken,
+      refreshRoom,
+      room,
+    ],
+  );
+
+  const movePick = useCallback(
+    async (fromSlotId: string, toSlotId: string, swap: boolean) => {
+      if (
+        !room ||
+        !me ||
+        !participantToken ||
+        busy
+      ) {
+        return;
+      }
+      const sourcePick = me.picks.find((pick) => pick.slotId === fromSlotId);
+      if (!sourcePick) return;
+      const targetPick = me.picks.find((pick) => pick.slotId === toSlotId);
+      const mutationKey = `${room.code}:${participantId}`;
+      if (!beginRoomMutation(mutationKey)) return;
+      clearMessages();
+      setBusy(true);
+      try {
+        await mutateRoomWithRetry({
+          initialRoom: room,
+          path: `/rooms/${room.code}/move`,
+          token: participantToken,
+          buildPayload: (latestRoom) => ({
+            expectedVersion: latestRoom.version,
+            fromSlotId,
+            toSlotId,
+            swap,
+          }),
+          acceptRoomState,
+          isApplied: (latestRoom) => {
+            const latestManager = latestRoom.participants.find(
+              (participant) => participant.id === participantId,
+            );
+            const latestSource = latestManager?.picks.find(
+              (pick) => pick.slotId === fromSlotId,
+            );
+            const latestTarget = latestManager?.picks.find(
+              (pick) => pick.slotId === toSlotId,
+            );
+            if (latestTarget?.player.id !== sourcePick.player.id) return false;
+            return targetPick
+              ? latestSource?.player.id === targetPick.player.id
+              : !latestSource;
+          },
+          canRetry: (latestRoom) => {
+            const latestManager = latestRoom.participants.find(
+              (participant) => participant.id === participantId,
+            );
+            const latestSource = latestManager?.picks.find(
+              (pick) => pick.slotId === fromSlotId,
+            );
+            const latestTarget = latestManager?.picks.find(
+              (pick) => pick.slotId === toSlotId,
+            );
+            return Boolean(
+              latestRoom.status === "drafting" &&
+                latestManager?.status === "drafting" &&
+                latestSource?.player.id === sourcePick.player.id &&
+                (targetPick
+                  ? latestTarget?.player.id === targetPick.player.id
+                  : !latestTarget),
+            );
+          },
+        });
+        setMoveFromSlotId(null);
+        setRepositioning(false);
+      } catch (moveError) {
+        setError(
+          moveError instanceof Error
+            ? moveError.message
+            : "Igrača nije moguće premjestiti.",
+        );
+        setMoveFromSlotId(null);
+        await refreshRoom();
+      } finally {
+        finishRoomMutation(mutationKey);
+        setBusy(false);
+      }
+    },
+    [
+      acceptRoomState,
+      busy,
+      me,
+      participantId,
+      participantToken,
+      refreshRoom,
+      room,
+    ],
+  );
 
   useEffect(() => {
     if (activeScreen !== "draft" || currentSpin || busy) return;
@@ -3322,7 +3541,7 @@ export default function HnlDraftGame() {
     <main id="main-content" className="home-screen">
       <section className="home-hero">
         <div className="hero-copy">
-          <p className="eyebrow">HRVATSKA LIGA · 1995/96 — 2025/26</p>
+          <p className="eyebrow">SHNL 36-0 · HRVATSKA LIGA · 1995/96 — 2025/26</p>
           <h1>
             Zavrti sezonu.
             <span>Složi XI.</span>
@@ -4245,10 +4464,10 @@ export default function HnlDraftGame() {
   const shareSeason = async () => {
     if (!room || !me?.result) return;
     const finish = finishLabel(me.result.finalPosition);
-    const text = `36–0 HNL: ${me.name} — ${finish} mjesto, ${me.result.points} bodova (${me.result.wins}-${me.result.draws}-${me.result.losses}).`;
+    const text = `SHNL 36-0: ${me.name} — ${finish} mjesto, ${me.result.points} bodova (${me.result.wins}-${me.result.draws}-${me.result.losses}).`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "36–0 HNL", text, url: window.location.href });
+        await navigator.share({ title: "SHNL 36-0", text, url: window.location.href });
       } else {
         await navigator.clipboard.writeText(`${text} ${window.location.href}`);
         setNotice("Rezultat je kopiran.");
@@ -4926,7 +5145,7 @@ export default function HnlDraftGame() {
       ) : null}
       <footer className="site-footer">
         <p>
-          36–0 je nezavisna fan-made HNL draft igra. Nije povezana s HNS-om,
+          SHNL 36-0 je nezavisna fan-made HNL draft igra. Nije povezana s HNS-om,
           klubovima, igračima ili pružateljima ocjena. Grbovi se prikazuju
           isključivo radi identifikacije i ostaju vlasništvo svojih nositelja.
         </p>

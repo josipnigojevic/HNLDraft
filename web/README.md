@@ -1,4 +1,4 @@
-# 36–0 HNL draft frontend
+# SHNL 36-0 frontend
 
 Croatian club-season adaptation of the social 38–0 draft format. A manager
 spins an HNL club in an exact season, chooses one player from that squad, and

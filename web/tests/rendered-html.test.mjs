@@ -30,7 +30,21 @@ test("server-renders the Croatian HNL club-season draft entry", async () => {
 
   const html = await response.text();
   assert.match(html, /<html[^>]*lang="hr"/i);
-  assert.match(html, /<title>36–0 — HNL Club × Season Draft<\/title>/i);
+  assert.match(html, /<title>SHNL 36-0 — Povijesni HNL draft<\/title>/i);
+  assert.match(
+    html,
+    /<meta[^>]+name="application-name"[^>]+content="SHNL 36-0"/i,
+  );
+  assert.match(
+    html,
+    /<link[^>]+rel="canonical"[^>]+href="https:\/\/hnldraft\.com\/"/i,
+  );
+  assert.match(
+    html,
+    /<meta[^>]+property="og:site_name"[^>]+content="SHNL 36-0"/i,
+  );
+  assert.match(html, /type="application\/ld\+json"/i);
+  assert.match(html, /"name":"SHNL 36-0"/);
   assert.match(html, /Zavrti sezonu/);
   assert.match(html, /Live draft/);
   assert.match(html, /Igraj sam/);
@@ -93,6 +107,32 @@ test("keeps room flows, disclosures, and accessible structure in source", async 
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
 
+test("ships a consistent SHNL 36-0 search and install identity", async () => {
+  const [page, layout, manifest, robots, sitemap, favicon] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/manifest.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/robots.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/sitemap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/favicon.svg", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /aria-label="SHNL 36-0 naslovnica"/);
+  assert.match(page, />SHNL</);
+  assert.match(page, /SHNL 36-0 · HRVATSKA LIGA/);
+  assert.match(page, /SHNL 36-0 je nezavisna fan-made HNL draft igra/);
+  assert.match(layout, /const siteName = "SHNL 36-0"/);
+  assert.match(layout, /alternates:\s*\{\s*canonical:\s*"\/"/);
+  assert.match(layout, /siteName/);
+  assert.match(layout, /"@type": "WebSite"/);
+  assert.match(layout, /"@type": "VideoGame"/);
+  assert.match(manifest, /name: "SHNL 36-0"/);
+  assert.match(manifest, /short_name: "SHNL 36-0"/);
+  assert.match(robots, /sitemap: `\$\{siteUrl\}\/sitemap\.xml`/);
+  assert.match(sitemap, /url: `\$\{siteUrl\}\/`/);
+  assert.match(favicon, /#B6FF24/i);
+});
+
 test("ships cookie-authenticated accounts with durable season history", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -151,6 +191,60 @@ test("retries simultaneous stale spins without duplicate submissions", async () 
   assert.doesNotMatch(
     page,
     /setError\(requestError instanceof Error \? requestError\.message/,
+  );
+});
+
+test("resyncs and retries stale room mutations without committing twice", async () => {
+  const page = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    page,
+    /ROOM_MUTATION_CONFLICT_CODES = new Set\(\[\s*"version_conflict",\s*"turn_conflict",\s*\]\)/,
+  );
+  assert.match(
+    page,
+    /ROOM_MUTATION_RETRY_DELAYS_MS = \[90, 180, 360, 720, 1_000\]/,
+  );
+  assert.match(page, /async function mutateRoomWithRetry/);
+  assert.match(page, /requestError\.status === 409/);
+  assert.match(
+    page,
+    /ROOM_MUTATION_CONFLICT_CODES\.has\(requestError\.code\)/,
+  );
+  assert.match(
+    page,
+    /attempt <= ROOM_MUTATION_RETRY_DELAYS_MS\.length/,
+  );
+  assert.match(page, /JSON\.stringify\(buildPayload\(requestRoom\)\)/);
+  assert.match(page, /`\/rooms\/\$\{initialRoom\.code\}`/);
+  assert.match(page, /if \(isApplied\(freshRoom\)\) return freshRoom/);
+  assert.match(page, /if \(!canRetry\(freshRoom\)\)/);
+  assert.match(page, /requestRoom = freshRoom/);
+  assert.match(
+    page,
+    /await waitForRetry\(ROOM_MUTATION_RETRY_DELAYS_MS\[attempt\]\)/,
+  );
+  assert.match(page, /const ACTIVE_ROOM_MUTATIONS = new Set<string>\(\)/);
+  assert.match(page, /if \(!beginRoomMutation\(mutationKey\)\) return/);
+  assert.match(page, /finishRoomMutation\(mutationKey\)/);
+  assert.match(
+    page,
+    /path: `\/rooms\/\$\{room\.code\}\/pick`[\s\S]*pick\.turn === requestedTurn[\s\S]*pick\.player\.id === player\.id[\s\S]*pick\.slotId === requestedSlotId/,
+  );
+  assert.match(
+    page,
+    /spinIdentity\(latestManager\.currentSpin\) ===\s*requestedSpinIdentity/,
+  );
+  assert.match(
+    page,
+    /path: `\/rooms\/\$\{room\.code\}\/move`[\s\S]*latestTarget\?\.player\.id !== sourcePick\.player\.id/,
+  );
+  assert.match(
+    page,
+    /path: `\/rooms\/\$\{room\.code\}\/start`[\s\S]*expectedVersion: latestRoom\.version/,
   );
 });
 

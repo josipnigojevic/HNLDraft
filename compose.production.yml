@@ -58,6 +58,7 @@ services:
         NEXT_PUBLIC_SIM_API_URL: /api
     environment:
       NEXT_PUBLIC_SIM_API_URL: /api
+      NEXT_PUBLIC_SITE_URL: "https://${DOMAIN:?Set DOMAIN in .env.production}"
     expose:
       - "3000"
     restart: unless-stopped

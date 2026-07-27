@@ -1,40 +1,56 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
 import "./globals.css";
 
-const title = "36–0 — HNL Club × Season Draft";
+const siteUrl = new URL(
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://hnldraft.com",
+);
+const siteName = "SHNL 36-0";
+const title = "SHNL 36-0 — Povijesni HNL draft";
 const description =
-  "Zavrti povijesni HNL klub i sezonu, draftaj stvarnu momčad te igraj solo ili uživo s prijateljima preko koda sobe.";
+  "SHNL 36-0 je hrvatska HNL draft igra: zavrti povijesni klub i sezonu, sastavi momčad te odigraj sezonu solo ili uživo s prijateljima.";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  const forwardedProtocol = requestHeaders.get("x-forwarded-proto");
-  const protocol =
-    forwardedProtocol ?? (host?.startsWith("localhost") || host?.startsWith("127.") ? "http" : "https");
-  const origin = host ? `${protocol}://${host}` : "http://localhost:3001";
-  const socialImage = `${origin}/og.png`;
-  return {
+export const metadata: Metadata = {
+  metadataBase: siteUrl,
+  title,
+  description,
+  applicationName: siteName,
+  category: "game",
+  keywords: [
+    "SHNL 36-0",
+    "HNL draft",
+    "HNL igra",
+    "hrvatski nogomet",
+    "povijesni HNL igrači",
+    "nogometni draft",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
+  manifest: "/manifest.webmanifest",
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
     title,
     description,
-    icons: {
-      icon: "/favicon.svg",
-      shortcut: "/favicon.svg",
-    },
-    openGraph: {
-      title,
-      description,
-      type: "website",
-      images: [{ url: socialImage, width: 1733, height: 908, alt: title }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [socialImage],
-    },
-  };
-}
+    url: "/",
+    siteName,
+    locale: "hr_HR",
+    type: "website",
+    images: [{ url: "/og.png", width: 1731, height: 909, alt: title }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: ["/og.png"],
+  },
+};
 
 export const viewport: Viewport = {
   colorScheme: "dark",
@@ -46,9 +62,45 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl.href}#website`,
+        url: siteUrl.href,
+        name: siteName,
+        alternateName: "HNL draft igra",
+        description,
+        inLanguage: "hr",
+      },
+      {
+        "@type": "VideoGame",
+        "@id": `${siteUrl.href}#game`,
+        url: siteUrl.href,
+        name: siteName,
+        description,
+        applicationCategory: "Game",
+        genre: "Sports simulation game",
+        gamePlatform: "Web browser",
+        operatingSystem: "Any",
+        inLanguage: "hr",
+        isAccessibleForFree: true,
+      },
+    ],
+  };
+
   return (
     <html lang="hr">
-      <body>{children}</body>
+      <body>
+        {children}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+          }}
+        />
+      </body>
     </html>
   );
 }

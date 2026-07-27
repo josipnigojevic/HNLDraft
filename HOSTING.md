@@ -1,6 +1,6 @@
 # Production hosting: Hetzner + Cloudflare
 
-This is the production path for the HNL 38-0 application. Caddy is the only
+This is the production path for the SHNL 36-0 application. Caddy is the only
 public container. It terminates HTTPS on ports 80/443, serves the web app, and
 routes same-origin `/api/*` requests to the private API container. The web and
 API services have no host-published ports, and account/season data lives in a
