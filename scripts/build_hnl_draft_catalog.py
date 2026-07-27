@@ -51,6 +51,9 @@ DEFAULT_POSITION_OVERRIDES = (
 DEFAULT_SUPPLEMENTAL_CLUB_SEASONS = (
     REPOSITORY_ROOT / "data" / "supplemental_club_seasons.json"
 )
+DEFAULT_CLUB_SEASON_ENRICHMENTS = (
+    REPOSITORY_ROOT / "data" / "transfermarkt_squad_supplements.json"
+)
 
 EXACT_POSITION_CODES = {
     "GK",
@@ -72,6 +75,76 @@ EXACT_POSITION_CODES = {
 }
 POSITION_GROUP_CODES = {"DEF", "MID", "FWD"}
 VALID_POSITION_CODES = EXACT_POSITION_CODES | POSITION_GROUP_CODES | {"UNK"}
+
+# These slot definitions mirror the formations exposed by the room API.  They
+# live here as plain data so catalog validation does not need to import or boot
+# the API service.  Each tuple is ``(unit, accepted exact roles)``.  A cited
+# broad role (DEF/MID/FWD) is compatible with every slot in its unit, matching
+# the runtime draft rules.
+GK = ("GK", frozenset({"GK"}))
+RB = ("DEF", frozenset({"RB", "RWB", "CB"}))
+RCB = ("DEF", frozenset({"CB", "RB"}))
+CB = ("DEF", frozenset({"CB"}))
+LCB = ("DEF", frozenset({"CB", "LB"}))
+LB = ("DEF", frozenset({"LB", "LWB", "CB"}))
+RWB = ("DEF", frozenset({"RWB", "RB", "RW"}))
+LWB = ("DEF", frozenset({"LWB", "LB", "LW"}))
+DM = ("MID", frozenset({"DM", "CM"}))
+CM = ("MID", frozenset({"CM", "DM", "AM"}))
+AM = ("MID", frozenset({"AM", "CM", "SS"}))
+RM = ("MID", frozenset({"RM", "RW", "CM"}))
+LM = ("MID", frozenset({"LM", "LW", "CM"}))
+WIDE_RM = ("MID", frozenset({"RM", "RW", "RWB", "CM"}))
+WIDE_LM = ("MID", frozenset({"LM", "LW", "LWB", "CM"}))
+RW = ("FWD", frozenset({"RW", "RM", "LW", "AM"}))
+LW = ("FWD", frozenset({"LW", "LM", "RW", "AM"}))
+NARROW_RW = ("FWD", frozenset({"RW", "RM", "AM"}))
+NARROW_LW = ("FWD", frozenset({"LW", "LM", "AM"}))
+ST = ("FWD", frozenset({"ST", "CF"}))
+RST = ("FWD", frozenset({"ST", "CF", "RW"}))
+LST = ("FWD", frozenset({"ST", "CF", "LW"}))
+SS = ("FWD", frozenset({"SS", "AM", "ST", "CF"}))
+RAM = ("MID", frozenset({"AM", "CM", "RW"}))
+LAM = ("MID", frozenset({"AM", "CM", "LW"}))
+
+LEGAL_XI_FORMATIONS = {
+    "4-3-3": (GK, RB, RCB, LCB, LB, DM, CM, CM, RW, ST, LW),
+    "4-4-2": (GK, RB, RCB, LCB, LB, RM, CM, CM, LM, RST, LST),
+    "4-2-3-1": (GK, RB, RCB, LCB, LB, DM, DM, RW, AM, LW, ST),
+    "4-5-1": (GK, RB, RCB, LCB, LB, RM, DM, CM, DM, LM, ST),
+    "3-4-3": (
+        GK,
+        RCB,
+        CB,
+        LCB,
+        WIDE_RM,
+        CM,
+        CM,
+        WIDE_LM,
+        NARROW_RW,
+        ST,
+        NARROW_LW,
+    ),
+    "3-5-2": (GK, RCB, CB, LCB, RWB, DM, CM, CM, LWB, RST, LST),
+    "5-4-1": (GK, RWB, RCB, CB, LCB, LWB, RM, CM, CM, LM, ST),
+    "4-1-2-1-2": (GK, RB, RCB, LCB, LB, DM, CM, CM, AM, RST, LST),
+    "4-4-1-1": (GK, RB, RCB, LCB, LB, RM, CM, CM, LM, SS, ST),
+    "5-3-2": (GK, RWB, RCB, CB, LCB, LWB, CM, CM, CM, RST, LST),
+    "3-4-1-2": (
+        GK,
+        RCB,
+        CB,
+        LCB,
+        WIDE_RM,
+        CM,
+        CM,
+        WIDE_LM,
+        AM,
+        RST,
+        LST,
+    ),
+    "4-2-2-2": (GK, RB, RCB, LCB, LB, DM, DM, RAM, LAM, RST, LST),
+}
 
 CLUB_ACCENTS = {
     "dinamo": "#1769ff",
@@ -127,6 +200,15 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Source-cited club-season rosters that are absent from the "
             "performance input."
+        ),
+    )
+    parser.add_argument(
+        "--club-season-enrichments",
+        type=Path,
+        default=DEFAULT_CLUB_SEASON_ENRICHMENTS,
+        help=(
+            "Source-cited full squad pages merged into partial performance "
+            "club-seasons before the playability gate."
         ),
     )
     parser.add_argument("--output", required=True, type=Path)
@@ -482,6 +564,132 @@ def assert_catalog_position_integrity(
                 )
 
 
+def _player_identity(player: dict[str, Any]) -> str:
+    """Return the strongest available within-squad person identity."""
+    source_player_id = str(player.get("sourcePlayerId") or "").strip()
+    if source_player_id:
+        return f"source:{source_player_id}"
+    name = normalized_name(str(player.get("name") or ""))
+    if name:
+        return f"name:{name}"
+    return f"row:{player.get('id')}"
+
+
+def _slot_compatible(
+    player: dict[str, Any],
+    slot: tuple[str, frozenset[str]],
+) -> bool:
+    unit, accepted = slot
+    positions = frozenset(
+        str(position).upper() for position in player.get("positions", [])
+    )
+    return unit in positions or bool(accepted.intersection(positions))
+
+
+def _can_field_formation(
+    players: list[dict[str, Any]],
+    slots: tuple[tuple[str, frozenset[str]], ...],
+) -> bool:
+    """Use maximum bipartite matching; one player may fill only one slot."""
+    if len(players) < len(slots):
+        return False
+    slot_to_player: dict[int, int] = {}
+
+    def assign(player_index: int, visited_slots: set[int]) -> bool:
+        for slot_index, slot in enumerate(slots):
+            if (
+                slot_index in visited_slots
+                or not _slot_compatible(players[player_index], slot)
+            ):
+                continue
+            visited_slots.add(slot_index)
+            current_player = slot_to_player.get(slot_index)
+            if current_player is None or assign(current_player, visited_slots):
+                slot_to_player[slot_index] = player_index
+                return True
+        return False
+
+    for player_index in range(len(players)):
+        assign(player_index, set())
+        if len(slot_to_player) == len(slots):
+            return True
+    return False
+
+
+def assess_club_season_playability(
+    club_season: dict[str, Any],
+) -> dict[str, Any]:
+    """Describe whether a source squad is complete enough to enter the reel."""
+    players = list(club_season.get("players") or [])
+    unique_players: dict[str, dict[str, Any]] = {}
+    eligible_players: dict[str, dict[str, Any]] = {}
+    for player in players:
+        identity = _player_identity(player)
+        unique_players.setdefault(identity, player)
+        if (
+            player.get("draftEligible", True)
+            and player.get("positions") != ["UNK"]
+        ):
+            eligible_players.setdefault(identity, player)
+
+    eligible = list(eligible_players.values())
+    legal_formations = [
+        name
+        for name, slots in LEGAL_XI_FORMATIONS.items()
+        if _can_field_formation(eligible, slots)
+    ]
+    missing_formations = [
+        name for name in LEGAL_XI_FORMATIONS if name not in legal_formations
+    ]
+    reasons: list[str] = []
+    if len(unique_players) < 11:
+        reasons.append("fewer-than-11-unique-players")
+    if len(eligible_players) < 11:
+        reasons.append("fewer-than-11-draft-eligible-players")
+    if not legal_formations:
+        reasons.append("no-legal-xi")
+    if missing_formations:
+        reasons.append("missing-supported-formations")
+
+    position_groups = {
+        group: sum(
+            player.get("positionGroup") == group for player in eligible
+        )
+        for group in ("GK", "DEF", "MID", "FWD")
+    }
+    return {
+        "playable": not reasons,
+        "playerRows": len(players),
+        "uniquePlayers": len(unique_players),
+        "draftEligibleUniquePlayers": len(eligible_players),
+        "duplicatePlayerRows": max(0, len(players) - len(unique_players)),
+        "eligiblePositionGroups": position_groups,
+        "legalFormations": legal_formations,
+        "missingSupportedFormations": missing_formations,
+        "reasons": reasons,
+        "method": (
+            "Eleven distinct, draft-eligible people assigned to eleven slots "
+            "with maximum bipartite matching under the runtime role rules; "
+            "the squad must satisfy every formation selectable before a spin."
+        ),
+    }
+
+
+def partition_playable_club_seasons(
+    club_seasons: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Annotate every candidate and quarantine squads that cannot field an XI."""
+    playable: list[dict[str, Any]] = []
+    incomplete: list[dict[str, Any]] = []
+    for club_season in club_seasons:
+        assessment = assess_club_season_playability(club_season)
+        coverage = dict(club_season.get("coverage") or {})
+        coverage["playability"] = assessment
+        annotated = {**club_season, "coverage": coverage}
+        (playable if assessment["playable"] else incomplete).append(annotated)
+    return playable, incomplete
+
+
 def club_accent(name: str) -> str:
     lowered = name.lower()
     for key, accent in CLUB_ACCENTS.items():
@@ -727,6 +935,8 @@ def load_supplemental_club_seasons(
     profiles: dict[str, dict[str, str]],
     market_rows_by_name: dict[str, dict[str, str]],
     position_overrides: dict[str, dict[str, Any]],
+    *,
+    id_prefix: str = "supplement",
 ) -> list[dict[str, Any]]:
     if path is None or not path.exists():
         return []
@@ -761,10 +971,19 @@ def load_supplemental_club_seasons(
                     row_positions,
                     context=f"{path}:{club} {season}:{name}",
                 )
+                role_scope = (
+                    "exact position"
+                    if EXACT_POSITION_CODES.intersection(source_positions)
+                    else "broad position"
+                )
                 resolved = {
                     "positionGroup": row_group,
                     "positions": source_positions,
-                    "sourcePlayerId": f"source-{_slug(name)}",
+                    "sourcePlayerId": str(
+                        row.get("sourcePlayerId")
+                        or row.get("playerId")
+                        or f"source-{_slug(name)}"
+                    ),
                     "nationality": row.get("nationality") or "Unknown",
                     "highestMarketValue": 0,
                     "positionConfidence": record_confidence,
@@ -774,8 +993,9 @@ def load_supplemental_club_seasons(
                     },
                     "draftEligible": True,
                     "positionDisclosure": (
-                        "Broad position is transcribed from the cited "
-                        "club-season squad table; no exact role is implied."
+                        f"Source-backed {role_scope} is transcribed from the "
+                        "cited club-season squad table; no additional role is "
+                        "implied."
                     ),
                 }
             else:
@@ -817,6 +1037,13 @@ def load_supplemental_club_seasons(
                 row.get("goals"),
                 context=f"{path}:{club} {season}:{name}:goals",
             )
+            season_market_value = optional_int(
+                row.get("marketValueEur"),
+                context=f"{path}:{club} {season}:{name}:marketValueEur",
+            )
+            date_of_birth = str(
+                row.get("dateOfBirth") or row.get("birthDate") or ""
+            ).strip() or None
             rating_appearances = appearances or 0
             rating_goals = goals or 0
             group = resolved["positionGroup"]
@@ -836,18 +1063,23 @@ def load_supplemental_club_seasons(
                     assists=0,
                     clean_sheets=0,
                     goals_conceded=0,
-                    highest_market_value=resolved["highestMarketValue"],
+                    highest_market_value=(
+                        season_market_value
+                        if season_market_value is not None
+                        else resolved["highestMarketValue"]
+                    ),
                 )
                 + 4,
             )
             players.append(
                 {
                     "id": (
-                        f"supplement-{_slug(club)}-{_slug(name)}-{start_year}"
+                        f"{id_prefix}-{_slug(club)}-{_slug(name)}-{start_year}"
                     ),
                     "sourcePlayerId": resolved["sourcePlayerId"],
                     "name": name,
                     "nationality": resolved["nationality"],
+                    "dateOfBirth": date_of_birth,
                     "positionGroup": group,
                     "positions": resolved["positions"],
                     "seasonRating": rating,
@@ -863,6 +1095,7 @@ def load_supplemental_club_seasons(
                     "marketValuePeakEur": (
                         resolved["highestMarketValue"] or None
                     ),
+                    "marketValueSeasonEur": season_market_value,
                     "ratingKind": (
                         "editorial-derived"
                         if appearances is not None and goals is not None
@@ -901,13 +1134,15 @@ def load_supplemental_club_seasons(
                 player["name"],
             )
         )
-        club_id = str(source_record.get("clubId") or f"supplement-{_slug(club)}")
+        club_id = str(
+            source_record.get("clubId") or f"{id_prefix}-{_slug(club)}"
+        )
         draft_eligible = sum(
             bool(player["draftEligible"]) for player in players
         )
         records.append(
             {
-                "id": f"supplement-{club_id}-{start_year}",
+                "id": f"{id_prefix}-{club_id}-{start_year}",
                 "clubId": club_id,
                 "club": club,
                 "season": season,
@@ -933,6 +1168,226 @@ def load_supplemental_club_seasons(
     return records
 
 
+def _has_exact_position(player: dict[str, Any]) -> bool:
+    return bool(
+        EXACT_POSITION_CODES.intersection(
+            str(position).upper()
+            for position in player.get("positions", [])
+        )
+    )
+
+
+def merge_club_season_enrichment(
+    base_record: dict[str, Any],
+    enrichment_record: dict[str, Any],
+) -> dict[str, Any]:
+    """Union a full squad page with an existing partial performance record."""
+    players = [dict(player) for player in base_record.get("players", [])]
+    by_source_player_id = {
+        str(player.get("sourcePlayerId")): index
+        for index, player in enumerate(players)
+        if player.get("sourcePlayerId")
+    }
+    by_name = {
+        normalized_name(str(player.get("name") or "")): index
+        for index, player in enumerate(players)
+        if str(player.get("name") or "").strip()
+    }
+    existing_ids = {
+        str(player.get("id")) for player in players if player.get("id")
+    }
+    matched_rows = 0
+    appended_rows = 0
+    position_repairs = 0
+
+    for enrichment_player in enrichment_record.get("players", []):
+        source_player_id = str(
+            enrichment_player.get("sourcePlayerId") or ""
+        ).strip()
+        name_key = normalized_name(str(enrichment_player.get("name") or ""))
+        player_index = (
+            by_source_player_id.get(source_player_id)
+            if source_player_id
+            else None
+        )
+        if player_index is None and name_key:
+            player_index = by_name.get(name_key)
+        if player_index is not None:
+            matched_rows += 1
+            existing = players[player_index]
+            if (
+                _has_exact_position(enrichment_player)
+                and not _has_exact_position(existing)
+            ):
+                for key in (
+                    "positionGroup",
+                    "positions",
+                    "draftEligible",
+                    "positionSource",
+                    "positionDisclosure",
+                ):
+                    existing[key] = enrichment_player.get(key)
+                existing["confidence"] = max(
+                    as_float(existing.get("confidence")),
+                    as_float(enrichment_player.get("confidence")),
+                )
+                position_repairs += 1
+            if (
+                existing.get("nationality") in (None, "", "Unknown")
+                and enrichment_player.get("nationality")
+                not in (None, "", "Unknown")
+            ):
+                existing["nationality"] = enrichment_player["nationality"]
+            for factual_key in ("dateOfBirth", "marketValueSeasonEur"):
+                if (
+                    existing.get(factual_key) in (None, "")
+                    and enrichment_player.get(factual_key) not in (None, "")
+                ):
+                    existing[factual_key] = enrichment_player[factual_key]
+            continue
+
+        appended = dict(enrichment_player)
+        candidate_id = str(appended.get("id") or "")
+        if not candidate_id or candidate_id in existing_ids:
+            base_id = (
+                f"enrichment-{_slug(str(base_record.get('club') or 'club'))}-"
+                f"{_slug(str(appended.get('name') or 'player'))}-"
+                f"{base_record.get('seasonStart')}"
+            )
+            candidate_id = base_id
+            suffix = 2
+            while candidate_id in existing_ids:
+                candidate_id = f"{base_id}-{suffix}"
+                suffix += 1
+            appended["id"] = candidate_id
+        players.append(appended)
+        appended_index = len(players) - 1
+        existing_ids.add(candidate_id)
+        if source_player_id:
+            by_source_player_id[source_player_id] = appended_index
+        if name_key:
+            by_name[name_key] = appended_index
+        appended_rows += 1
+
+    players.sort(
+        key=lambda player: (
+            -as_int(player.get("seasonRating")),
+            str(player.get("positionGroup") or ""),
+            str(player.get("name") or ""),
+        )
+    )
+    base_coverage = dict(base_record.get("coverage") or {})
+    enrichment_source = dict(enrichment_record.get("source") or {})
+    base_source = base_record.get("source") or {
+        "name": "Transfermarkt-derived football-datasets",
+        "url": SOURCE_DATASET_URL,
+        "priority": "secondary",
+    }
+    base_coverage.update(
+        {
+            "playerRows": len(players),
+            "draftEligibleRows": sum(
+                bool(player.get("draftEligible", True))
+                for player in players
+            ),
+            "status": "source-enriched",
+            "enrichment": {
+                "source": enrichment_source,
+                "sourcePlayerRows": len(
+                    enrichment_record.get("players", [])
+                ),
+                "matchedRows": matched_rows,
+                "appendedRows": appended_rows,
+                "positionRepairs": position_repairs,
+                "note": enrichment_record.get("coverage", {}).get("note"),
+            },
+        }
+    )
+    return {
+        **base_record,
+        "players": players,
+        "confidence": round(
+            max(
+                as_float(base_record.get("confidence")),
+                as_float(enrichment_record.get("confidence")),
+            ),
+            2,
+        ),
+        "coverage": base_coverage,
+        "source": {
+            "name": "Merged performance and full-squad sources",
+            "url": enrichment_source.get("url") or SOURCE_DATASET_URL,
+            "priority": enrichment_source.get("priority") or "secondary",
+            "components": [base_source, enrichment_source],
+        },
+    }
+
+
+def _club_season_matches(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    if left.get("season") != right.get("season"):
+        return False
+    left_club_id = str(left.get("clubId") or "").strip()
+    right_club_id = str(right.get("clubId") or "").strip()
+    if left_club_id and right_club_id and left_club_id == right_club_id:
+        return True
+    return normalized_name(str(left.get("club") or "")) == normalized_name(
+        str(right.get("club") or "")
+    )
+
+
+def merge_club_season_enrichments(
+    playable_candidates: list[dict[str, Any]],
+    below_threshold_records: list[dict[str, Any]],
+    enrichment_records: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[tuple[str, str]]]:
+    """Merge enrichments, promoting partial fragments for later validation."""
+    candidates = list(playable_candidates)
+    partials = list(below_threshold_records)
+    enriched_keys: set[tuple[str, str]] = set()
+    for enrichment in enrichment_records:
+        candidate_index = next(
+            (
+                index
+                for index, candidate in enumerate(candidates)
+                if _club_season_matches(candidate, enrichment)
+            ),
+            None,
+        )
+        if candidate_index is not None:
+            candidates[candidate_index] = merge_club_season_enrichment(
+                candidates[candidate_index],
+                enrichment,
+            )
+        else:
+            partial_index = next(
+                (
+                    index
+                    for index, partial in enumerate(partials)
+                    if _club_season_matches(partial, enrichment)
+                ),
+                None,
+            )
+            if partial_index is None:
+                candidates.append(enrichment)
+            else:
+                candidates.append(
+                    merge_club_season_enrichment(
+                        partials.pop(partial_index),
+                        enrichment,
+                    )
+                )
+        enriched_keys.add(
+            (
+                normalized_name(str(enrichment["club"])),
+                str(enrichment["season"]),
+            )
+        )
+    return candidates, enriched_keys
+
+
 def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
     profiles = load_profiles(args.profiles)
     (
@@ -949,6 +1404,11 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         args,
         "supplemental_club_seasons",
         DEFAULT_SUPPLEMENTAL_CLUB_SEASONS,
+    )
+    enrichment_path = getattr(
+        args,
+        "club_season_enrichments",
+        DEFAULT_CLUB_SEASON_ENRICHMENTS,
     )
     position_overrides = load_position_overrides(position_overrides_path)
     grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
@@ -1031,6 +1491,7 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
             )
 
     club_seasons: list[dict[str, Any]] = []
+    below_threshold_records: list[dict[str, Any]] = []
     omitted: list[dict[str, Any]] = []
     for (club_id, club_name, short_season), players in grouped.items():
         for player in players:
@@ -1065,6 +1526,7 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         if len(players) >= args.minimum_squad_size:
             club_seasons.append(record)
         else:
+            below_threshold_records.append(record)
             omitted.append(
                 {
                     "club": club_name,
@@ -1109,8 +1571,50 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         for row in omitted
         if (normalized_name(row["club"]), row["season"]) not in supplemental_keys
     ]
+    enrichment_records = load_supplemental_club_seasons(
+        enrichment_path,
+        profiles,
+        market_rows_by_name,
+        position_overrides,
+        id_prefix="enrichment",
+    )
+    club_seasons, enriched_keys = merge_club_season_enrichments(
+        club_seasons,
+        below_threshold_records,
+        enrichment_records,
+    )
+    omitted = [
+        row
+        for row in omitted
+        if (normalized_name(row["club"]), row["season"]) not in enriched_keys
+    ]
     club_seasons.sort(key=lambda item: (item["seasonStart"], item["club"]))
     assert_catalog_position_integrity(club_seasons)
+    candidate_club_seasons = len(club_seasons)
+    club_seasons, incomplete_club_seasons = (
+        partition_playable_club_seasons(club_seasons)
+    )
+    for record in incomplete_club_seasons:
+        assessment = record["coverage"]["playability"]
+        omitted.append(
+            {
+                "club": record["club"],
+                "season": record["season"],
+                "playerRows": len(record["players"]),
+                "uniquePlayers": assessment["uniquePlayers"],
+                "draftEligibleUniquePlayers": assessment[
+                    "draftEligibleUniquePlayers"
+                ],
+                "reason": "playability-gate",
+                "reasons": assessment["reasons"],
+                "legalFormations": assessment["legalFormations"],
+                "missingSupportedFormations": assessment[
+                    "missingSupportedFormations"
+                ],
+                "recordId": record["id"],
+            }
+        )
+    omitted.sort(key=lambda item: (item["season"], item["club"]))
     seasons = sorted({item["season"] for item in club_seasons})
     unresolved_position_players = sum(
         player["positionGroup"] == "UNVERIFIED"
@@ -1118,7 +1622,7 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         for player in record["players"]
     )
     return {
-        "schemaVersion": "1.1.0",
+        "schemaVersion": "1.2.0",
         "generatedAt": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "competition": {
             "id": COMPETITION_ID,
@@ -1131,7 +1635,8 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
             "note": (
                 "The game is architected for the full requested range. This "
                 "generated playable pack only includes source-backed squads "
-                "meeting the minimum player-row threshold."
+                "with at least eleven distinct eligible players that can be "
+                "assigned to all eleven slots of every supported formation."
             ),
         },
         "playableRange": {
@@ -1141,16 +1646,31 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         },
         "coverage": {
             "clubSeasons": len(club_seasons),
+            "candidateClubSeasons": candidate_club_seasons,
+            "incompleteClubSeasons": len(incomplete_club_seasons),
             "players": sum(len(item["players"]) for item in club_seasons),
+            "incompletePlayerRows": sum(
+                len(item["players"]) for item in incomplete_club_seasons
+            ),
             "omittedClubSeasons": len(omitted),
             "skippedRowsWithoutProfile": skipped_without_profile,
             "skippedRowsWithoutUsableName": skipped_without_name,
             "completeHistoricalRosterArchive": False,
-            "confidence": 0.68,
+            "confidence": 0.86 if enrichment_records else 0.68,
             "officialLegacyChampionSquads": len(hns_legacy_records),
             "supplementalClubSeasons": len(supplemental_records),
+            "clubSeasonEnrichments": len(enrichment_records),
             "unresolvedPositionPlayers": unresolved_position_players,
             "positionOverrides": len(position_overrides),
+            "playabilityGate": {
+                "minimumUniquePlayers": 11,
+                "minimumDraftEligibleUniquePlayers": 11,
+                "requiresLegalXi": True,
+                "requiresEverySupportedFormation": True,
+                "formations": list(LEGAL_XI_FORMATIONS),
+                "assignment": "maximum-bipartite-matching",
+                "failedCandidates": len(incomplete_club_seasons),
+            },
         },
         "sources": [
             {
@@ -1184,6 +1704,27 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
                 "url": TRANSFERMARKT_COMPETITION_URL,
                 "use": "Underlying descriptive competition and squad source.",
                 "priority": "secondary",
+            },
+            {
+                "name": "Transfermarkt historical squad pages",
+                "url": TRANSFERMARKT_COMPETITION_URL,
+                "use": (
+                    "Season-specific full roster identity, detailed primary "
+                    "position, nationality, birth date and market value. Every "
+                    "enriched club-season retains its direct page URL."
+                ),
+                "priority": "secondary",
+            },
+            {
+                "name": "FootballSquads Croatian archive",
+                "url": "https://www.footballsquads.co.uk/croatia/",
+                "use": (
+                    "Season-specific roster and broad G/D/M/F fallback where "
+                    "a detailed page is absent or its single primary roles do "
+                    "not cover a selectable formation. Fallbacks never cross "
+                    "goalkeeper, defence, midfield or forward units."
+                ),
+                "priority": "secondary-fallback",
             },
             {
                 "name": "Croatian Wikipedia season supplements",
@@ -1222,8 +1763,14 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
                 if supplemental_path and supplemental_path.exists()
                 else None
             ),
+            "clubSeasonEnrichmentsSha256": (
+                sha256(enrichment_path)
+                if enrichment_path and enrichment_path.exists()
+                else None
+            ),
         },
         "clubSeasons": club_seasons,
+        "incompleteClubSeasons": incomplete_club_seasons,
         "omitted": omitted,
     }
 
@@ -1238,7 +1785,9 @@ def main() -> None:
     )
     print(
         f"Wrote {payload['coverage']['clubSeasons']} club-seasons and "
-        f"{payload['coverage']['players']} player rows to {args.output}"
+        f"{payload['coverage']['players']} player rows to {args.output}; "
+        f"quarantined {payload['coverage']['incompleteClubSeasons']} "
+        "incomplete candidates"
     )
 
 

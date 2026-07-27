@@ -20,15 +20,15 @@ Current result:
 
 | Check | Result | Confidence |
 |---|---:|---:|
-| Club-seasons | 216 | 0.98 |
-| Player-season rows | 4,696 | 0.98 |
+| Playable club-seasons | 255 | 0.98 |
+| Playable player-season rows | 8,196 | 0.98 |
 | Cited historical position overrides | 191 | 0.90 |
 | Unresolved position rows | 16 | 0.99 |
 | GK combined with an outfield role | 0 | 1.00 |
 | Universal-position fallbacks | 0 | 1.00 |
 | Blank emitted player names | 0 | 1.00 |
-| API-loader player rows accepted | 4,696 of 4,696 | 1.00 |
-| Legacy/supplemental squads able to field the default XI | 18 of 18 | 1.00 |
+| Playable squads with at least 11 eligible players | 255 of 255 | 1.00 |
+| Playable squads able to field all 12 formations | 255 of 255 | 1.00 |
 
 The 16 unresolved rows (14 unique names) remain visible as roster evidence but
 cannot be drafted: Zoran Mamić, Krešimir Radić, Duje Špalj, Ante Tomić, Goran
@@ -37,6 +37,46 @@ Dobrić, Ivan Bijelić, Marko Krešić, Johann Smith, and Jonatan Germano. Sandi
 Dobrić and Ivan Bijelić each occur in two seasons. Multi-unit source
 descriptions, identity conflicts, and names without a reliable position source
 were not collapsed to an invented primary position.
+
+## Playability gate and full-squad enrichment
+
+Catalog generation no longer treats the old eight-row ingestion threshold as
+proof that a club-season is playable. Before a candidate enters
+`clubSeasons`, the generator now requires:
+
+1. at least 11 distinct source-backed people;
+2. at least 11 distinct players with verified draft eligibility; and
+3. a one-player-per-slot assignment for **every** formation selectable before
+   a spin.
+
+The third check uses maximum bipartite matching with the same exact-role and
+broad-unit compatibility rules as the runtime. A test compares all generator
+slot definitions with the API definitions so formation changes cannot drift
+silently. Each candidate receives a machine-readable
+`coverage.playability` report containing unique counts, legal and missing
+formations, failure reasons, and the validation method. Failed candidates are
+retained with all source rows under `incompleteClubSeasons` and summarized in
+`omitted`; they are not put on the playable reel.
+
+`data/transfermarkt_squad_supplements.json` is an optional full-squad
+enrichment input. Its `clubSeasons` records use the same source-cited player
+row format as `supplemental_club_seasons.json`. The merge resolves a
+club-season by club ID plus season first, then normalized club name plus
+season. Players match by source player ID first and normalized name second.
+Existing performance statistics and ratings remain authoritative; cited exact
+positions repair only unresolved or broad-only roles, while missing roster
+members are appended with null unpublished statistics. Even an enriched record
+must pass the playability gate before promotion. Confidence: **0.99** for the
+implemented validation and merge behavior.
+
+The checked-in snapshot contains 143 source groups: 127 Transfermarkt
+historical squad pages, seven FootballSquads roster fallbacks, and nine
+combined records. FootballSquads is used only when the detailed historical
+page is absent or its single primary positions cannot cover every selectable
+formation. Its broad role remains inside the cited unit (`GK`, `DEF`, `MID`,
+or `FWD`); it never grants cross-unit eligibility. The source acquisition is
+offline and reproducible—the Docker application reads the checked-in JSON and
+does not scrape either site at runtime.
 
 ## Source-backed club-season additions
 
@@ -59,38 +99,42 @@ name, profile first plus last name, then the matching player-index full name.
 Jordan N'Kololo (`sourcePlayerId: 228434`) is recovered from the local player
 index. The single row for `sourcePlayerId: 427502` has no usable name in the
 configured profile or player-index inputs and is skipped before catalog
-emission. Consequently the API loader skips zero generated rows and its 4,696
-loaded players exactly match `coverage.players`. Confidence: **1.00** for the
-implemented behavior and generated counts.
+emission. Confidence: **1.00** for the implemented behavior and generated
+counts.
 
 ## Remaining omitted club-seasons
 
-The 46 remaining omissions are Transfermarkt-derived KR1 groups with fewer than
-the generator's minimum eight named player rows. The partial rows are retained
-in the catalog's `omitted` array, but the missing roster members are not
-inferred.
+Full-squad enrichment promoted 39 previously omitted sparse groups and repaired
+every club-season that had been selectable with fewer than 11 players. Seven
+2004/05 groups remain explicitly omitted because neither checked source
+provides enough cited roster evidence:
 
-| Season | Count | Source rows found per omitted club |
+| Club-season | Cited rows | Status |
 |---|---:|---|
-| 2004/05 | 10 | GNK Dinamo Zagreb (6); NK Kamen Ingrad Velika (4); NK Pula 1856 (6); NK Osijek (5); NK Varteks Varazdin (4); Slaven Belupo Koprivnica (2); NK Zagreb (5); NK Zadar (1); NK Inter Zapresic (6); NK Medjimurje Cakovec (2) |
-| 2005/06 | 8 | Slaven Belupo Koprivnica (7); NK Pula Staro Cesko (4); NK Kamen Ingrad Velika (5); NK Varteks Varazdin (4); NK Zagreb (5); NK Inter Zapresic (3); NK Medjimurje Cakovec (3); HNK Cibalia Vinkovci (3) |
-| 2006/07 | 4 | NK Kamen Ingrad Velika (4); NK Zagreb (6); HNK Cibalia Vinkovci (4); NK Medjimurje Cakovec (2) |
-| 2007/08 | 5 | NK Medjimurje Cakovec (5); NK Osijek (7); HNK Sibenik (4); NK Inter Zapresic (5); HNK Cibalia Vinkovci (3) |
-| 2008/09 | 5 | HNK Cibalia Vinkovci (2); NK Osijek (7); HNK Sibenik (7); NK Croatia Sesvete (5); NK Zadar (7) |
-| 2009/10 | 7 | HNK Cibalia Vinkovci (3); NK Inter Zapresic (7); NK Croatia Sesvete (6); HNK Sibenik (6); NK Osijek (7); NK Medjimurje Cakovec (3); NK Karlovac 1919 (3) |
-| 2010/11 | 4 | HNK Cibalia Vinkovci (3); NK Karlovac 1919 (4); RNK Split (5); NK Varazdin (4) |
-| 2011/12 | 3 | HNK Cibalia Vinkovci (5); NK Varazdin (7); NK Karlovac 1919 (5) |
+| Kamen Ingrad 2004/05 | 17 | Full XI for nine formations; lacks enough cited defenders for three five-defender formations |
+| Međimurje 2004/05 | 3 | Below 11 verified players |
+| Osijek 2004/05 | 5 | Below the source-ingestion threshold |
+| Pula 1856 2004/05 | 6 | Below the source-ingestion threshold |
+| Varteks Varaždin 2004/05 | 4 | Below the source-ingestion threshold |
+| Zadar 2004/05 | 1 | Below the source-ingestion threshold |
+| Zagreb 2004/05 | 5 | Below the source-ingestion threshold |
 
-Confidence that the omissions are represented faithfully: **0.98**. Confidence
-that these are complete historical rosters: **0.20**; the source cache is
-demonstrably partial, so the catalog explicitly reports
-`completeHistoricalRosterArchive: false`.
+The incomplete records and every reason are preserved under
+`incompleteClubSeasons` / `omitted`; none can appear on the wheel. Confidence
+that no incomplete squad is selectable: **1.00**. The catalog still reports
+`completeHistoricalRosterArchive: false` because those seven source gaps are
+not filled with invented names or roles.
 
 ## Reproduce and validate
 
 Use the same raw input files and fixed paths:
 
 ```bash
+python3 scripts/fetch_transfermarkt_squad_supplements.py --dry-run
+# Run the acquisition only when intentionally refreshing the checked-in
+# snapshot; the game itself has no live scraping dependency.
+python3 scripts/fetch_transfermarkt_squad_supplements.py
+
 python3 scripts/build_hnl_draft_catalog.py \
   --performances /private/tmp/tm_player_performances.csv \
   --profiles /private/tmp/tm_player_profiles.csv \
@@ -98,6 +142,7 @@ python3 scripts/build_hnl_draft_catalog.py \
   --hns-riznica-dir /private/tmp \
   --position-overrides data/historical_position_overrides.json \
   --supplemental-club-seasons data/supplemental_club_seasons.json \
+  --club-season-enrichments data/transfermarkt_squad_supplements.json \
   --output data/hnl_draft_catalog.json
 
 python3 -m unittest discover -s tests -v
