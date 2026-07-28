@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -274,37 +274,67 @@ test("keeps the reel moving while waiting and shows distinct rows after landing"
 });
 
 test("ships a validated local crest for every catalog club identity", async () => {
+  const [catalog, page, assetFiles] = await Promise.all([
+    readFile(
+      new URL("../../data/hnl_draft_catalog.json", import.meta.url),
+      "utf8",
+    ).then(JSON.parse),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readdir(new URL("../public/clubs/", import.meta.url)),
+  ]);
   const expectedIds = [
-    "144",
-    "223",
-    "2362",
-    "24575",
-    "2566",
-    "314",
-    "327",
-    "419",
-    "420",
-    "447",
-    "456",
-    "485",
-    "5107",
-    "599",
-    "918",
-    "999",
-    "11083",
-    "11194",
-    "12109",
+    ...new Set(catalog.clubSeasons.map((record) => String(record.clubId))),
   ].sort();
+  const crestSetSource = page.match(
+    /const CLUB_CREST_IDS = new Set\(\[([\s\S]*?)\]\);/,
+  )?.[1];
+  assert.ok(crestSetSource, "CLUB_CREST_IDS is missing");
+  const mappedIds = [
+    ...crestSetSource.matchAll(/"([0-9]+)"/g),
+  ].map((match) => match[1]).sort();
+  const aliasSetSource = page.match(
+    /const CLUB_CREST_ALIASES:[^{]+\{([\s\S]*?)\n\};/,
+  )?.[1];
+  assert.ok(aliasSetSource, "CLUB_CREST_ALIASES is missing");
+  const aliases = Object.fromEntries(
+    [...aliasSetSource.matchAll(/"([^"]+)": "([0-9]+)"/g)].map((match) => [
+      match[1],
+      match[2],
+    ]),
+  );
   const sourceManifest = JSON.parse(
     await readFile(
       new URL("../public/clubs/sources.json", import.meta.url),
       "utf8",
     ),
   );
+  assert.deepEqual(mappedIds, expectedIds);
   assert.deepEqual(
     sourceManifest.crests.map((crest) => crest.id).sort(),
     expectedIds,
   );
+  assert.deepEqual(
+    assetFiles
+      .filter((file) => file.endsWith(".png"))
+      .map((file) => file.replace(/\.png$/, ""))
+      .sort(),
+    expectedIds,
+  );
+
+  const slug = (value) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  for (const record of catalog.clubSeasons) {
+    assert.equal(
+      aliases[slug(record.club)],
+      String(record.clubId),
+      `crest alias is missing for ${record.club}`,
+    );
+  }
 
   for (const id of expectedIds) {
     const image = await readFile(
@@ -315,6 +345,15 @@ test("ships a validated local crest for every catalog club identity", async () =
       image.subarray(0, 8).toString("hex"),
       "89504e470d0a1a0a",
       `${id}.png is not a PNG`,
+    );
+    const manifestEntry = sourceManifest.crests.find(
+      (crest) => crest.id === id,
+    );
+    assert.equal(manifestEntry?.file, `${id}.png`);
+    assert.equal(manifestEntry?.bytes, image.length);
+    assert.equal(
+      manifestEntry?.sourceUrl,
+      `https://tmssl.akamaized.net/images/wappen/head/${id}.png`,
     );
   }
 });

@@ -25,6 +25,10 @@ const CLUBS = [
   ["11083", "NK Rudeš"],
   ["12109", "NK Lučko"],
   ["456", "HNK Vukovar 1991"],
+  ["10314", "NK Karlovac 1919"],
+  ["2776", "NK Kamen Ingrad Velika"],
+  ["5111", "NK Croatia Sesvete"],
+  ["6087", "NK Međimurje Čakovec"],
 ];
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +39,7 @@ function download(url, redirectCount = 0) {
   return new Promise((resolveDownload, rejectDownload) => {
     const request = get(
       url,
-      { headers: { "User-Agent": "36-0-HNL-local-asset-builder/1.0" } },
+      { headers: { "User-Agent": "SHNL-36-0-local-asset-builder/1.0" } },
       (response) => {
         if (
           response.statusCode >= 300 &&
