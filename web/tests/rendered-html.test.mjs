@@ -425,3 +425,34 @@ test("uses formation-specific pitch geometry and paced live match reveals", asyn
   assert.match(css, /\.manager-match-progress/);
   assert.match(css, /\.match-card\.outcome-live/);
 });
+
+test("groups position badges and keeps the mobile draft squad within reach", async () => {
+  const page = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(page, /type PositionGroup = "gk" \| "def" \| "mid" \| "fwd"/);
+  assert.match(page, /function positionGroup\(/);
+  assert.match(page, /return `position-\$\{positionGroup\(position\)\}`/);
+  assert.match(page, /normalized === "G" \|\| normalized === "GK"/);
+  assert.match(page, /"DEF", "CB", "LCB", "RCB", "LB", "RB"/);
+  assert.match(page, /"FWD", "FW", "ST", "CF", "SS", "LW", "RW", "WF"/);
+  assert.match(
+    page,
+    /className=\{positionGroupClass\(position\)\}[\s\S]*?\{position\}/,
+  );
+  assert.match(page, /<details className="mobile-squad-summary">/);
+  assert.match(page, /<strong>Tvoja XI<\/strong>/);
+  assert.match(page, /<ul aria-label="Odabrani igrači u Tvojoj XI">/);
+  assert.match(page, /mobile-squad-position/);
+  assert.match(page, /Još nema odabranih igrača\./);
+  assert.match(page, /\.slice\(activeManagerFixture \? -4 : -5\)/);
+  assert.match(
+    page,
+    /window\.matchMedia\("\(max-width: 900px\)"\)\.matches/,
+  );
+  assert.match(page, /document\.querySelector<HTMLElement>\("\.wheel-panel"\)/);
+  assert.match(page, /window\.scrollTo\(\{ top, left: 0, behavior: "auto" \}\)/);
+  assert.match(page, /\}, \[activeScreen, seasonPhase\]\);/);
+});

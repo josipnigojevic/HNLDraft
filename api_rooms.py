@@ -457,6 +457,8 @@ FORMATIONS: dict[str, tuple[Slot, ...]] = {
 # Stable editorial opponents for the post-draft 10-team, 36-match game season.
 # These strengths are transparent simulation inputs, not official HNS ratings
 # and not a claim about a particular real-world season's participants.
+# Scorer pools use real, catalog-backed 2025/26 squad names for display only;
+# they do not contribute ratings or alter the simulation model.
 HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
     {
         "id": "gnk-dinamo",
@@ -464,6 +466,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Dinamo",
         "rating": 83.0,
         "accent": "#0057b8",
+        "scorers": (
+            "Dion Beljo",
+            "Sandro Kulenović",
+            "Mateo Lisica",
+            "Luka Stojković",
+            "Arbër Hoxha",
+            "Robert Mudražija",
+        ),
     },
     {
         "id": "hnk-hajduk",
@@ -471,6 +481,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Hajduk",
         "rating": 80.5,
         "accent": "#ef3340",
+        "scorers": (
+            "Marko Livaja",
+            "Yassine Benrahou",
+            "Abdoulie Sanyang",
+            "Ante Rebić",
+            "Michele Šego",
+            "Rokas Pukštas",
+        ),
     },
     {
         "id": "hnk-rijeka",
@@ -478,6 +496,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Rijeka",
         "rating": 79.5,
         "accent": "#75c8f0",
+        "scorers": (
+            "Ante Matej Jurić",
+            "Niko Janković",
+            "Šimun Butić",
+            "Duje Čop",
+            "Luka Menalo",
+            "Toni Fruk",
+        ),
     },
     {
         "id": "nk-osijek",
@@ -485,6 +511,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Osijek",
         "rating": 76.5,
         "accent": "#174ea6",
+        "scorers": (
+            "Nail Omerović",
+            "Anton Matković",
+            "Arnel Jakupović",
+            "Samuel Akere",
+            "Domagoj Bukvić",
+            "Tonio Teklić",
+        ),
     },
     {
         "id": "nk-varazdin",
@@ -492,6 +526,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Varaždin",
         "rating": 74.5,
         "accent": "#1d4d92",
+        "scorers": (
+            "Aleksa Latković",
+            "Luka Mamić",
+            "Ivan Mamut",
+            "Iuri Tavares",
+            "Ivan Canjuga",
+            "Marko Dabro",
+        ),
     },
     {
         "id": "nk-istra-1961",
@@ -499,6 +541,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Istra",
         "rating": 74.0,
         "accent": "#e5c529",
+        "scorers": (
+            "Smail Prevljak",
+            "Saydou Bangura",
+            "Allen Obando",
+            "Salim Fago Lawal",
+            "Vinko Rozić",
+            "Emil Frederiksen",
+        ),
     },
     {
         "id": "nk-lokomotiva",
@@ -506,6 +556,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Lokomotiva",
         "rating": 73.5,
         "accent": "#315d9b",
+        "scorers": (
+            "Jakov-Anton Vasilj",
+            "Aleks Stojaković",
+            "Dušan Vuković",
+            "Bartol Kardum",
+            "Ibrahim Sabra",
+            "Mirko Sušak",
+        ),
     },
     {
         "id": "hnk-gorica",
@@ -513,6 +571,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Gorica",
         "rating": 73.0,
         "accent": "#d7192d",
+        "scorers": (
+            "Ante Erceg",
+            "Filip Čuić",
+            "Ante Kavelj",
+            "Ivan Fiolić",
+            "Bruno Bogojević",
+            "Luka Vrzić",
+        ),
     },
     {
         "id": "nk-slaven-belupo",
@@ -520,6 +586,14 @@ HNL_SIMULATION_OPPONENTS: tuple[dict[str, Any], ...] = (
         "shortName": "Slaven",
         "rating": 72.5,
         "accent": "#d51f2b",
+        "scorers": (
+            "Josip Mitrović",
+            "Ilija Nestorovski",
+            "Andro Sokač",
+            "Ivan Ćubelić",
+            "Alen Grgić",
+            "Gabrijel Šivalec",
+        ),
     },
 )
 
@@ -2503,6 +2577,57 @@ class RoomStore:
             events.append(event)
         return events
 
+    @classmethod
+    def _static_goal_events(
+        cls,
+        room_seed: int,
+        matchweek: int,
+        opponent: Mapping[str, Any],
+        goal_count: int,
+    ) -> list[dict[str, Any]]:
+        """Create display-only events without touching match RNG streams."""
+        if goal_count <= 0:
+            return []
+        scorer_pool = tuple(
+            name
+            for name in opponent.get("scorers", ())
+            if isinstance(name, str) and name.strip()
+        )
+        if not scorer_pool:
+            raise ValueError(
+                f"Static opponent {opponent['id']} has no scorer pool."
+            )
+        minute_rng = cls._derived_rng(
+            room_seed,
+            "shared-league-static-events-v1",
+            matchweek,
+            opponent["id"],
+        )
+        minutes = sorted(
+            minute_rng.randint(1, 90) for _ in range(goal_count)
+        )
+        events: list[dict[str, Any]] = []
+        for goal_index, minute in enumerate(minutes):
+            # A separately derived selector keeps scorer names deterministic
+            # while leaving scores, minutes and every existing RNG draw intact.
+            name_rng = cls._derived_rng(
+                room_seed,
+                "shared-league-static-scorer-v1",
+                matchweek,
+                opponent["id"],
+                goal_index,
+            )
+            events.append(
+                {
+                    "playerId": None,
+                    "playerName": scorer_pool[
+                        name_rng.randrange(len(scorer_pool))
+                    ],
+                    "minute": minute,
+                }
+            )
+        return events
+
     @staticmethod
     def _derived_rng(room_seed: int, *labels: object) -> random.Random:
         material = "|".join([str(room_seed), *(str(label) for label in labels)])
@@ -2972,23 +3097,12 @@ class RoomStore:
                 scorers = home_scorers if at_home else away_scorers
                 opponent_scorers = away_scorers if at_home else home_scorers
                 if not opponent["isManager"]:
-                    opponent_minutes_rng = cls._derived_rng(
+                    opponent_scorers = cls._static_goal_events(
                         room_seed,
-                        "shared-league-static-events-v1",
                         matchweek,
-                        opponent["id"],
+                        opponent,
+                        goals_against,
                     )
-                    opponent_scorers = [
-                        {
-                            "playerId": None,
-                            "playerName": f"{opponent['shortName']} strijelac",
-                            "minute": minute,
-                        }
-                        for minute in sorted(
-                            opponent_minutes_rng.randint(1, 90)
-                            for _ in range(goals_against)
-                        )
-                    ]
                 opponent_goal_minutes = [
                     int(event["minute"]) for event in opponent_scorers
                 ]

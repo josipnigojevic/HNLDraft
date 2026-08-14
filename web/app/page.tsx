@@ -1077,6 +1077,38 @@ function surname(name: string) {
   return name.trim().split(/\s+/).at(-1) ?? name;
 }
 
+type PositionGroup = "gk" | "def" | "mid" | "fwd";
+
+function positionGroup(position: string | null | undefined): PositionGroup {
+  const normalized = (position ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (normalized === "G" || normalized === "GK") return "gk";
+  if (
+    ["DEF", "CB", "LCB", "RCB", "LB", "RB", "LWB", "RWB", "SW"].includes(
+      normalized,
+    ) ||
+    normalized.endsWith("CB")
+  ) {
+    return "def";
+  }
+  if (
+    ["FWD", "FW", "ST", "CF", "SS", "LW", "RW", "WF"].includes(
+      normalized,
+    ) ||
+    normalized.endsWith("ST")
+  ) {
+    return "fwd";
+  }
+  return "mid";
+}
+
+function positionGroupClass(position: string | null | undefined) {
+  return `position-${positionGroup(position)}`;
+}
+
 function playerStatLine(player: Player) {
   const stats = player.stats ?? {};
   const parts: string[] = [];
@@ -1962,7 +1994,9 @@ function AccountHistoryPitch({ season }: { season: SeasonHistoryEntry }) {
               } as CSSProperties
             }
           >
-            <span>{pick.slotLabel}</span>
+            <span className={positionGroupClass(pick.slotLabel)}>
+              {pick.slotLabel}
+            </span>
             <strong>{surname(pick.player.name)}</strong>
             <small>{pick.selectedRating ?? pick.player.rating ?? "—"}</small>
           </div>
@@ -2620,6 +2654,18 @@ export default function HnlDraftGame() {
           ? "results"
           : "home"
     : screen;
+
+  useEffect(() => {
+    const mobileDraftWheel =
+      activeScreen === "draft" &&
+      window.matchMedia("(max-width: 900px)").matches
+        ? document.querySelector<HTMLElement>(".wheel-panel")
+        : null;
+    const top = mobileDraftWheel
+      ? window.scrollY + mobileDraftWheel.getBoundingClientRect().top
+      : 0;
+    window.scrollTo({ top, left: 0, behavior: "auto" });
+  }, [activeScreen, seasonPhase]);
 
   const acceptRoomState = useCallback((nextRoom: Room) => {
     setRoom((currentRoom) => {
@@ -4190,6 +4236,10 @@ export default function HnlDraftGame() {
   const renderDraft = () => {
     if (!room || !me) return null;
     const remaining = room.settings.targetPicks - me.picks.length;
+    const draftedPicks = room.settings.slots.flatMap((slot) => {
+      const pick = me.picks.find((item) => item.slotId === slot.id);
+      return pick ? [{ pick, slot }] : [];
+    });
     return (
       <main id="main-content" className="draft-screen">
         <section className="draft-statusbar">
@@ -4383,6 +4433,46 @@ export default function HnlDraftGame() {
                       : "Odaberi igrača, zatim kompatibilno prazno mjesto."}
                   </p>
                 </div>
+                <details className="mobile-squad-summary">
+                  <summary>
+                    <span>
+                      <strong>Tvoja XI</strong>
+                      <small>
+                        {me.picks.length}/{room.settings.targetPicks} odabrano
+                      </small>
+                    </span>
+                    <b aria-hidden="true">PREGLED ↓</b>
+                  </summary>
+                  {draftedPicks.length ? (
+                    <ul aria-label="Odabrani igrači u Tvojoj XI">
+                      {draftedPicks.map(({ pick, slot }) => (
+                        <li key={slot.id}>
+                          <span
+                            className={`mobile-squad-position ${positionGroupClass(
+                              slot.label,
+                            )}`}
+                          >
+                            {slot.label}
+                          </span>
+                          <strong>{pick.player.name}</strong>
+                          <small
+                            aria-label={
+                              typeof pick.selectedRating === "number"
+                                ? `Ocjena ${Math.round(pick.selectedRating)}`
+                                : "Ocjena nije prikazana"
+                            }
+                          >
+                            {typeof pick.selectedRating === "number"
+                              ? Math.round(pick.selectedRating)
+                              : "—"}
+                          </small>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>Još nema odabranih igrača.</p>
+                  )}
+                </details>
                 <div className="sort-row">
                   <span>SORTIRAJ</span>
                   {[
@@ -4435,7 +4525,12 @@ export default function HnlDraftGame() {
                           </span>
                           <span className="position-tags">
                             {player.positions.slice(0, 3).map((position) => (
-                              <i key={position}>{position}</i>
+                              <i
+                                className={positionGroupClass(position)}
+                                key={position}
+                              >
+                                {position}
+                              </i>
                             ))}
                           </span>
                           <b aria-hidden="true">{isSelected ? "−" : "+"}</b>
@@ -4449,6 +4544,9 @@ export default function HnlDraftGame() {
                               );
                               return (
                                 <button
+                                  className={positionGroupClass(
+                                    slot?.label ?? slotId,
+                                  )}
                                   key={slotId}
                                   onClick={() => void pickPlayer(player, slotId)}
                                   disabled={busy}
@@ -4618,7 +4716,7 @@ export default function HnlDraftGame() {
           ? activeMatchClock.minute
           : 0;
       const latestMatches = visibleMatches
-        .slice(activeManagerFixture ? -2 : -3)
+        .slice(activeManagerFixture ? -4 : -5)
         .reverse();
       const currentRound = Math.min(
         seasonMatches.length,
@@ -4929,7 +5027,15 @@ export default function HnlDraftGame() {
                 )
                 .map((player) => (
                   <div className="player-season-row" key={player.playerId}>
-                    <span>{player.slotId?.toUpperCase() ?? player.positions?.[0] ?? "—"}</span>
+                    <span
+                      className={positionGroupClass(
+                        player.slotId ?? player.positions?.[0],
+                      )}
+                    >
+                      {player.slotId?.toUpperCase() ??
+                        player.positions?.[0] ??
+                        "—"}
+                    </span>
                     <strong>{player.playerName}</strong>
                     <span>{player.goals || "—"}</span>
                     <span>{player.assists || "—"}</span>

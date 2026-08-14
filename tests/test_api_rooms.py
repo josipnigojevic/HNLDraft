@@ -1,5 +1,6 @@
-import json
+import hashlib
 import http.cookiejar
+import json
 import os
 import sqlite3
 import tempfile
@@ -240,11 +241,32 @@ class SeasonPayloadTests(unittest.TestCase):
 
         opponent_counts: dict[str, int] = {}
         venue_counts: dict[tuple[str, str], int] = {}
+        opponent_scorer_count = 0
+        opponent_by_id = {
+            opponent["id"]: opponent
+            for opponent in api_rooms.HNL_SIMULATION_OPPONENTS
+        }
         for match in first["matches"]:
             opponent_id = match["opponent"]["id"]
             opponent_counts[opponent_id] = opponent_counts.get(opponent_id, 0) + 1
             key = (opponent_id, match["venue"])
             venue_counts[key] = venue_counts.get(key, 0) + 1
+            opponent_events = match["opponentScorers"]
+            opponent_scorer_count += len(opponent_events)
+            self.assertEqual(len(opponent_events), match["goalsAgainst"])
+            self.assertEqual(
+                [event["minute"] for event in opponent_events],
+                match["opponentGoalMinutes"],
+            )
+            scorer_pool = set(opponent_by_id[opponent_id]["scorers"])
+            for event in opponent_events:
+                self.assertEqual(
+                    set(event), {"playerId", "playerName", "minute"}
+                )
+                self.assertIsNone(event["playerId"])
+                self.assertIn(event["playerName"], scorer_pool)
+                self.assertNotIn("strijelac", event["playerName"].casefold())
+        self.assertEqual(opponent_scorer_count, goals_against)
         self.assertEqual(set(opponent_counts.values()), {4})
         self.assertTrue(
             all(
@@ -297,6 +319,82 @@ class SeasonPayloadTests(unittest.TestCase):
         self.assertIn("earned", first["awards"])
         self.assertIn("biggestWin", first["records"])
         self.assertIn("highestScoringMatch", first["records"])
+
+    def test_static_scorer_names_cannot_perturb_season_outcomes(self) -> None:
+        def outcome_payload(result: dict) -> dict:
+            match_fields = (
+                "fixtureId",
+                "matchweek",
+                "venue",
+                "homeTeamId",
+                "awayTeamId",
+                "homeGoals",
+                "awayGoals",
+                "goalsFor",
+                "goalsAgainst",
+                "outcome",
+                "pointsEarned",
+                "expectedGoalsFor",
+                "expectedGoalsAgainst",
+                "opponentGoalMinutes",
+            )
+            summary_fields = (
+                "played",
+                "wins",
+                "draws",
+                "losses",
+                "points",
+                "goalsFor",
+                "goalsAgainst",
+                "goalDifference",
+                "finalPosition",
+            )
+            return {
+                "seed": result["seed"],
+                "seasonId": result["seasonId"],
+                "summary": {
+                    field: result[field] for field in summary_fields
+                },
+                "projection": result["projection"],
+                "matches": [
+                    {field: match[field] for field in match_fields}
+                    for match in result["matches"]
+                ],
+                "leagueTable": result["leagueTable"],
+            }
+
+        picks = completed_xi_picks()
+        baseline = api_rooms.RoomStore._season_result(
+            38_000_474, 1, picks
+        )
+        relabeled_opponents = tuple(
+            {
+                **opponent,
+                "scorers": tuple(reversed(opponent["scorers"])),
+            }
+            for opponent in api_rooms.HNL_SIMULATION_OPPONENTS
+        )
+        with mock.patch.object(
+            api_rooms,
+            "HNL_SIMULATION_OPPONENTS",
+            relabeled_opponents,
+        ):
+            relabeled = api_rooms.RoomStore._season_result(
+                38_000_474, 1, picks
+            )
+
+        baseline_outcomes = outcome_payload(baseline)
+        self.assertEqual(baseline_outcomes, outcome_payload(relabeled))
+        serialized = json.dumps(
+            baseline_outcomes,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        self.assertEqual(
+            hashlib.sha256(serialized).hexdigest(),
+            "bacce4d20405d861e7a337e0c21c4a8874bf452c25d81481aaf4136457bf4ff2",
+        )
 
     def test_seed_changes_season_but_viewer_seat_does_not(self) -> None:
         picks = completed_xi_picks()
