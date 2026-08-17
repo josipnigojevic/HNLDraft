@@ -167,6 +167,15 @@ HNL_AUTH_PEPPER=paste-the-64-character-random-value
 HNL_SECURE_COOKIES=1
 HNL_AUTH_SESSION_SECONDS=2592000
 HNL_PASSWORD_SCRYPT_N=131072
+HNL_PASSWORD_RESET_SECONDS=1800
+HNL_SMTP_HOST=smtp.your-email-provider.example
+HNL_SMTP_PORT=587
+HNL_SMTP_USERNAME=your-smtp-username
+HNL_SMTP_PASSWORD=your-smtp-password
+HNL_SMTP_FROM="SHNL 36-0 <no-reply@your-real-domain.example>"
+HNL_SMTP_STARTTLS=1
+HNL_SMTP_SSL=0
+HNL_SMTP_TIMEOUT_SECONDS=10
 HNL_TRUST_PROXY=1
 HNL_AUTH_RATE_LIMIT_ATTEMPTS=10
 HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS=300
@@ -182,6 +191,18 @@ excludes it.
 the client-address headers before `HNL_TRUST_PROXY=1` lets the API use them for
 the login limiter. Keep the Cloudflare CIDRs in `Caddyfile` synchronized with
 Cloudflare's official [IPv4 and IPv6 lists](https://www.cloudflare.com/ips/).
+
+Use SMTP credentials from a transactional-email provider, verify the sending
+domain, and publish the provider's SPF and DKIM records in Cloudflare DNS.
+Publish a DMARC record as well. The default configuration uses authenticated
+submission on port 587 with STARTTLS; if the provider requires implicit TLS,
+use port 465 with `HNL_SMTP_SSL=1` and `HNL_SMTP_STARTTLS=0`. Password-reset
+links expire after 30 minutes, are single-use, and revoke existing login
+sessions after a successful reset.
+
+The production API joins the private application network and a separate
+outbound bridge network. It still has no published host port; the second
+network exists only so it can resolve and connect to the SMTP provider.
 
 Validate the resolved Compose model before starting:
 
@@ -353,6 +374,7 @@ and accept that records created after that backup will be lost.
 - Only 22, 80, and 443 are reachable; 3000/3001/8000/8002 are closed.
 - `.env.production` is mode 600, untracked, and backed up securely.
 - Registration, login, logout, and cookie persistence work over HTTPS.
+- Password-reset email arrives, opens the HTTPS reset form, and the link works only once.
 - Solo and live-room seasons complete and appear in signed-in history.
 - `/api` has an edge cache-bypass rule.
 - Daily database backups leave the server and a restore has been tested.
@@ -361,11 +383,11 @@ and accept that records created after that backup will be lost.
 
 ### Before broad public registration
 
-The first account release intentionally has no email-verification/password-
-reset provider and no self-service account export/deletion screen. Before
-marketing public signups, choose a transactional-email provider, implement
-verified recovery, publish a privacy notice with a retention/contact policy,
-and add authenticated export/deletion flows. The European Commission's
+Password recovery requires the transactional SMTP and sending-domain DNS
+configuration above. Before marketing public signups, also add email
+verification and a self-service account export/deletion screen, publish a
+privacy notice with a retention/contact policy, and test provider delivery and
+bounce handling. The European Commission's
 [GDPR principles](https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/principles-gdpr_en)
 cover data minimisation and storage limitation, while its
 [individual-request guidance](https://commission.europa.eu/law/law-topic/data-protection/rules-business-and-organisations/dealing-individuals-requests_en)

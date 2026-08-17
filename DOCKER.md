@@ -28,6 +28,17 @@ Use the `localhost` URL exactly as shown. The local frontend also calls
 `http://localhost:8002`, so the browser can send the SameSite account cookie
 between the two development ports.
 
+The local stack does not expose password-reset tokens by default. To test the
+complete recovery flow without sending email, opt in for that run only:
+
+```bash
+HNL_PASSWORD_RESET_EXPOSE_TOKEN=1 docker compose up --build -d
+```
+
+Use that override only when the API port is reachable from your own trusted
+machine. `compose.production.yml` always disables token exposure and requires
+transactional SMTP delivery.
+
 Change ports and the browser-facing API URL together when needed:
 
 ```bash

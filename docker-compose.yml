@@ -9,6 +9,10 @@ services:
       HNL_ROOMS_DB: /data/rooms.sqlite3
       HNL_CATALOG_PATH: /app/data/hnl_draft_catalog.json
       HNL_ALLOWED_ORIGINS: "${HNL_ALLOWED_ORIGINS:-http://localhost:3001,http://127.0.0.1:3001}"
+      HNL_PUBLIC_URL: "${HNL_PUBLIC_URL:-http://localhost:3001}"
+      # Opt-in local-only convenience for testing without an SMTP provider.
+      # Keep disabled whenever this port is reachable by another device.
+      HNL_PASSWORD_RESET_EXPOSE_TOKEN: "${HNL_PASSWORD_RESET_EXPOSE_TOKEN:-0}"
     volumes:
       - hnl_rooms:/data
     ports:

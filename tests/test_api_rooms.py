@@ -1318,6 +1318,286 @@ class RoomStoreTests(unittest.TestCase):
             "josip.hnl",
         )
 
+    def test_password_reset_is_generic_one_time_and_revokes_sessions(self) -> None:
+        deliveries: list[tuple[str, str, str]] = []
+        delivery_ready = threading.Event()
+
+        def capture_delivery(
+            recipient: str,
+            username: str,
+            reset_url: str,
+        ) -> None:
+            deliveries.append((recipient, username, reset_url))
+            delivery_ready.set()
+
+        self.store._password_reset_sender = capture_delivery
+        registered, old_session = self.store.register_account(
+            {
+                "username": "reset-user",
+                "email": "reset@example.com",
+                "password": "the original long account password",
+            }
+        )
+        known_response = self.store.request_password_reset(
+            {"email": "RESET@example.com"}
+        )
+        self.assertTrue(delivery_ready.wait(timeout=1))
+        self.assertEqual(
+            known_response,
+            {
+                "ok": True,
+                "message": api_rooms.PASSWORD_RESET_GENERIC_MESSAGE,
+            },
+        )
+        self.assertNotIn("resetToken", known_response)
+        self.assertEqual(deliveries[0][:2], ("reset@example.com", "reset-user"))
+        reset_url = deliveries[0][2]
+        self.assertTrue(
+            reset_url.startswith("http://localhost:3001/#reset-password=")
+        )
+        reset_token = reset_url.split("#reset-password=", 1)[1]
+
+        unknown_response = self.store.request_password_reset(
+            {"email": "unknown@example.com"}
+        )
+        self.assertEqual(unknown_response, known_response)
+        self.assertEqual(len(deliveries), 1)
+
+        connection = self.store._connect()
+        try:
+            token_row = connection.execute(
+                "SELECT * FROM password_reset_tokens WHERE account_id = ?",
+                (registered["account"]["id"],),
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertEqual(token_row["token_hash"], api_rooms._sha256(reset_token))
+        self.assertNotEqual(token_row["token_hash"], reset_token)
+
+        with self.assertRaises(api_rooms.RequestError) as weak_password:
+            self.store.complete_password_reset(
+                {"token": reset_token, "newPassword": "too short"}
+            )
+        self.assertEqual(weak_password.exception.code, "invalid_password")
+        completed = self.store.complete_password_reset(
+            {
+                "token": reset_token,
+                "newPassword": "the replacement long account password",
+            }
+        )
+        self.assertEqual(completed, {"ok": True})
+        with self.assertRaises(api_rooms.RequestError) as replayed:
+            self.store.complete_password_reset(
+                {
+                    "token": reset_token,
+                    "newPassword": "short",
+                }
+            )
+        self.assertEqual(replayed.exception.code, "invalid_reset_token")
+        with self.assertRaises(api_rooms.RequestError) as revoked:
+            self.store.account_me(old_session)
+        self.assertEqual(revoked.exception.code, "authentication_required")
+        with self.assertRaises(api_rooms.RequestError) as old_password:
+            self.store.login_account(
+                {
+                    "identifier": "reset-user",
+                    "password": "the original long account password",
+                }
+            )
+        self.assertEqual(old_password.exception.code, "invalid_credentials")
+        logged_in, _ = self.store.login_account(
+            {
+                "identifier": "reset-user",
+                "password": "the replacement long account password",
+            }
+        )
+        self.assertEqual(logged_in["account"]["id"], registered["account"]["id"])
+
+    def test_password_reset_cooldown_preserves_links_and_expiry(self) -> None:
+        deliveries: list[str] = []
+        delivery_ready = threading.Event()
+
+        def capture_delivery(_email: str, _username: str, reset_url: str) -> None:
+            deliveries.append(reset_url)
+            delivery_ready.set()
+
+        self.store._password_reset_sender = capture_delivery
+        self.store.register_account(
+            {
+                "username": "recovery-user",
+                "email": "recovery@example.com",
+                "password": "a sufficiently long recovery password",
+            }
+        )
+        first = self.store.request_password_reset(
+            {"email": "recovery@example.com"}
+        )
+        self.assertTrue(delivery_ready.wait(timeout=1))
+        first_token = deliveries[-1].split("#reset-password=", 1)[1]
+
+        delivery_ready.clear()
+        repeated = self.store.request_password_reset(
+            {"email": "recovery@example.com"}
+        )
+        self.assertEqual(repeated, first)
+        self.assertFalse(delivery_ready.wait(timeout=0.05))
+        self.assertEqual(len(deliveries), 1)
+
+        self.clock.value += 61
+        self.store.request_password_reset({"email": "recovery@example.com"})
+        self.assertTrue(delivery_ready.wait(timeout=1))
+        second_token = deliveries[-1].split("#reset-password=", 1)[1]
+        self.assertNotEqual(first_token, second_token)
+
+        # A new request does not make the earlier unexpired recovery link fail.
+        self.store.complete_password_reset(
+            {
+                "token": first_token,
+                "newPassword": "a newly recovered account password",
+            }
+        )
+        with self.assertRaises(api_rooms.RequestError) as sibling_token:
+            self.store.complete_password_reset(
+                {
+                    "token": second_token,
+                    "newPassword": "yet another recovered account password",
+                }
+            )
+        self.assertEqual(sibling_token.exception.code, "invalid_reset_token")
+
+        delivery_ready.clear()
+        self.clock.value += 61
+        self.store.request_password_reset({"email": "recovery@example.com"})
+        self.assertTrue(delivery_ready.wait(timeout=1))
+        expired_token = deliveries[-1].split("#reset-password=", 1)[1]
+        self.clock.value += self.store.password_reset_seconds + 1
+        with self.assertRaises(api_rooms.RequestError) as expired:
+            self.store.complete_password_reset(
+                {
+                    "token": expired_token,
+                    "newPassword": "an expired replacement account password",
+                }
+            )
+        self.assertEqual(expired.exception.code, "invalid_reset_token")
+
+    def test_password_reset_rechecks_expiry_after_password_hashing(self) -> None:
+        deliveries: list[str] = []
+        delivery_ready = threading.Event()
+
+        def capture_delivery(_email: str, _username: str, reset_url: str) -> None:
+            deliveries.append(reset_url)
+            delivery_ready.set()
+
+        self.store._password_reset_sender = capture_delivery
+        self.store.register_account(
+            {
+                "username": "hash-expiry-user",
+                "email": "hash-expiry@example.com",
+                "password": "the original hash expiry password",
+            }
+        )
+        self.store.request_password_reset({"email": "hash-expiry@example.com"})
+        self.assertTrue(delivery_ready.wait(timeout=1))
+        reset_token = deliveries[-1].split("#reset-password=", 1)[1]
+        original_digest = self.store._password_digest
+
+        def slow_digest(
+            password: str,
+            salt_hex: str,
+            *,
+            work_factor: int | None = None,
+        ) -> str:
+            self.clock.value += self.store.password_reset_seconds + 1
+            return original_digest(
+                password,
+                salt_hex,
+                work_factor=work_factor,
+            )
+
+        with mock.patch.object(
+            self.store,
+            "_password_digest",
+            side_effect=slow_digest,
+        ):
+            with self.assertRaises(api_rooms.RequestError) as expired:
+                self.store.complete_password_reset(
+                    {
+                        "token": reset_token,
+                        "newPassword": "the replacement hash expiry password",
+                    }
+                )
+        self.assertEqual(expired.exception.code, "invalid_reset_token")
+        logged_in, _ = self.store.login_account(
+            {
+                "identifier": "hash-expiry-user",
+                "password": "the original hash expiry password",
+            }
+        )
+        self.assertEqual(logged_in["account"]["username"], "hash-expiry-user")
+
+    def test_password_reset_dev_exposure_and_starttls_delivery(self) -> None:
+        environment = {
+            "HNL_PUBLIC_URL": "https://shnl36.example/game?ignored=yes",
+            "HNL_PASSWORD_RESET_EXPOSE_TOKEN": "true",
+            "HNL_SMTP_HOST": "smtp.example.com",
+            "HNL_SMTP_PORT": "2525",
+            "HNL_SMTP_USERNAME": "smtp-user",
+            "HNL_SMTP_PASSWORD": "smtp-password",
+            "HNL_SMTP_FROM": "SHNL 36-0 <no-reply@example.com>",
+            "HNL_SMTP_STARTTLS": "1",
+        }
+        with mock.patch.dict(os.environ, environment):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                store = api_rooms.RoomStore(
+                    Path(temp_dir) / "reset.sqlite3",
+                    test_catalog(),
+                    password_scrypt_n=1 << 14,
+                    password_reset_sender=lambda *_args: None,
+                )
+                store.register_account(
+                    {
+                        "username": "exposed-user",
+                        "email": "exposed@example.com",
+                        "password": "a long developer reset password",
+                    }
+                )
+                response = store.request_password_reset(
+                    {"email": "exposed@example.com"}
+                )
+                self.assertIn("resetToken", response)
+                self.assertEqual(
+                    response["resetUrl"],
+                    "https://shnl36.example/game/#reset-password="
+                    + response["resetToken"],
+                )
+
+                smtp_context = object()
+                with (
+                    mock.patch.object(
+                        api_rooms.ssl,
+                        "create_default_context",
+                        return_value=smtp_context,
+                    ),
+                    mock.patch.object(api_rooms.smtplib, "SMTP") as smtp_class,
+                ):
+                    smtp = smtp_class.return_value.__enter__.return_value
+                    store._send_password_reset_email(
+                        "player@example.com",
+                        "player-one",
+                        response["resetUrl"],
+                    )
+                smtp_class.assert_called_once_with(
+                    "smtp.example.com",
+                    2525,
+                    timeout=10,
+                )
+                self.assertEqual(smtp.ehlo.call_count, 2)
+                smtp.starttls.assert_called_once_with(context=smtp_context)
+                smtp.login.assert_called_once_with("smtp-user", "smtp-password")
+                message = smtp.send_message.call_args.args[0]
+                self.assertEqual(message["To"], "player@example.com")
+                self.assertIn(response["resetUrl"], message.get_content())
+
     def test_password_policy_allows_unicode_and_has_no_composition_rule(self) -> None:
         registered, _ = self.store.register_account(
             {
@@ -1589,6 +1869,7 @@ class AccountSchemaMigrationTests(unittest.TestCase):
             self.assertIn("lineup_version", columns)
             self.assertIn("accounts", tables)
             self.assertIn("auth_sessions", tables)
+            self.assertIn("password_reset_tokens", tables)
             self.assertIn("season_history", tables)
 
 
@@ -1654,6 +1935,7 @@ class HTTPAdapterTests(unittest.TestCase):
             "HNL_ALLOWED_ORIGINS": "http://localhost:3001",
             "HNL_AUTH_RATE_LIMIT_ATTEMPTS": "1",
             "HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "HNL_PASSWORD_RESET_EXPOSE_TOKEN": "true",
         }
         with mock.patch.dict(os.environ, environment):
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -1661,6 +1943,7 @@ class HTTPAdapterTests(unittest.TestCase):
                     Path(temp_dir) / "rooms.sqlite3",
                     test_catalog(),
                     password_scrypt_n=1 << 14,
+                    password_reset_sender=lambda *_args: None,
                 )
                 try:
                     server = api_rooms.make_server(store, "127.0.0.1", 0)
@@ -1755,6 +2038,30 @@ class HTTPAdapterTests(unittest.TestCase):
                         limited_payload["error"]["code"],
                         "auth_rate_limited",
                     )
+
+                    reset_requested, response = json_request(
+                        "/account/password-reset/request",
+                        payload={"email": "http@example.com"},
+                        method="POST",
+                    )
+                    self.assertEqual(response.status, 202)
+                    self.assertTrue(reset_requested["ok"])
+                    self.assertIn("resetToken", reset_requested)
+                    reset_complete, response = json_request(
+                        "/account/password-reset/complete",
+                        payload={
+                            "token": reset_requested["resetToken"],
+                            "newPassword": "a new long HTTP account password",
+                        },
+                        method="POST",
+                    )
+                    self.assertEqual(reset_complete, {"ok": True})
+                    # Password reset revokes every server-side session and
+                    # clears this browser's now-stale session cookie too.
+                    self.assertIn("Max-Age=0", response.headers["Set-Cookie"])
+                    with self.assertRaises(urllib.error.HTTPError) as reset_anon:
+                        json_request("/account/me")
+                    self.assertEqual(reset_anon.exception.code, 401)
 
                     logged_out, response = json_request(
                         "/account/logout",

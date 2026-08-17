@@ -34,6 +34,12 @@ Default HTTP contract (JSON request/response bodies):
     POST /account/login
       {"identifier":"josip","password":"..."}
 
+    POST /account/password-reset/request
+      {"email":"josip@example.com"}
+
+    POST /account/password-reset/complete
+      {"token":"...","newPassword":"a new passphrase of at least 15 characters"}
+
     GET /account/me
     GET /account/history?limit=20&offset=0
     GET /account/history/{historyId}
@@ -70,27 +76,31 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import math
 import os
 import random
 import re
 import secrets
+import smtplib
 import sqlite3
+import ssl
 import threading
 import time
 import unicodedata
 import uuid
 from contextlib import contextmanager
+from email.message import EmailMessage
 from dataclasses import dataclass
 from http.cookies import CookieError, SimpleCookie
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 
-API_VERSION = "2.2.0"
+API_VERSION = "2.3.0"
 CATALOG_SCHEMA_VERSION = "1.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
@@ -99,6 +109,8 @@ DEFAULT_ROOM_TTL_SECONDS = 6 * 60 * 60
 MAX_ROOM_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60
 MAX_AUTH_SESSION_SECONDS = 365 * 24 * 60 * 60
+DEFAULT_PASSWORD_RESET_SECONDS = 30 * 60
+MAX_PASSWORD_RESET_SECONDS = 24 * 60 * 60
 AUTH_COOKIE_NAME = "hnl_session"
 DEFAULT_PASSWORD_SCRYPT_N = 1 << 17
 PASSWORD_SCRYPT_R = 8
@@ -117,6 +129,11 @@ EMAIL_PATTERN = re.compile(
     r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
     r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+)
+LOGGER = logging.getLogger(__name__)
+PASSWORD_RESET_GENERIC_MESSAGE = (
+    "Ako postoji račun s tom adresom e-pošte, poslane su upute za "
+    "poništavanje lozinke."
 )
 
 
@@ -1412,7 +1429,9 @@ class RoomStore:
         *,
         room_ttl_seconds: int = DEFAULT_ROOM_TTL_SECONDS,
         auth_session_seconds: int | None = None,
+        password_reset_seconds: int | None = None,
         password_scrypt_n: int | None = None,
+        password_reset_sender: Callable[[str, str, str], None] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         if not 1 <= room_ttl_seconds <= MAX_ROOM_TTL_SECONDS:
@@ -1426,6 +1445,15 @@ class RoomStore:
             )
         if not 60 <= auth_session_seconds <= MAX_AUTH_SESSION_SECONDS:
             raise ValueError("auth_session_seconds is outside the supported range.")
+        if password_reset_seconds is None:
+            password_reset_seconds = int(
+                os.getenv(
+                    "HNL_PASSWORD_RESET_SECONDS",
+                    str(DEFAULT_PASSWORD_RESET_SECONDS),
+                )
+            )
+        if not 300 <= password_reset_seconds <= MAX_PASSWORD_RESET_SECONDS:
+            raise ValueError("password_reset_seconds is outside the supported range.")
         if password_scrypt_n is None:
             password_scrypt_n = int(
                 os.getenv(
@@ -1442,10 +1470,25 @@ class RoomStore:
         self.catalog = catalog or Catalog.load(os.getenv("HNL_CATALOG_PATH"))
         self.room_ttl_seconds = room_ttl_seconds
         self.auth_session_seconds = auth_session_seconds
+        self.password_reset_seconds = password_reset_seconds
         self.password_scrypt_n = password_scrypt_n
         self.clock = clock
         self._lock = threading.RLock()
         self._auth_pepper = os.getenv("HNL_AUTH_PEPPER", "")
+        self._password_reset_sender = (
+            password_reset_sender or self._send_password_reset_email
+        )
+        self._password_reset_expose_token = os.getenv(
+            "HNL_PASSWORD_RESET_EXPOSE_TOKEN",
+            "",
+        ).lower() in {"1", "true", "yes"}
+        self._password_reset_public_url = os.getenv(
+            "HNL_PUBLIC_URL",
+            "http://localhost:3001",
+        ).strip()
+        public_url = urlsplit(self._password_reset_public_url)
+        if public_url.scheme not in {"http", "https"} or not public_url.netloc:
+            raise ValueError("HNL_PUBLIC_URL must be an absolute HTTP(S) URL.")
         self._dummy_password_salt = secrets.token_hex(16)
         self._dummy_password_hash = self._password_digest(
             "not-a-real-account-password-380",
@@ -1493,6 +1536,15 @@ class RoomStore:
                     created_at REAL NOT NULL,
                     last_seen_at REAL NOT NULL,
                     expires_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL
+                        REFERENCES accounts(id) ON DELETE CASCADE,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL,
+                    used_at REAL
                 );
 
                 CREATE TABLE IF NOT EXISTS rooms (
@@ -1563,6 +1615,8 @@ class RoomStore:
 
                 CREATE INDEX IF NOT EXISTS auth_sessions_account_idx
                     ON auth_sessions(account_id, expires_at);
+                CREATE INDEX IF NOT EXISTS password_reset_tokens_account_idx
+                    ON password_reset_tokens(account_id, expires_at);
                 CREATE INDEX IF NOT EXISTS participants_room_idx
                     ON participants(room_code, seat);
                 CREATE INDEX IF NOT EXISTS picks_participant_idx
@@ -1865,6 +1919,271 @@ class RoomStore:
                 "stats": self._aggregate_history(connection, account["id"]),
             }
         return response, token
+
+    def _password_reset_link(self, token: str) -> str:
+        public_url = urlsplit(self._password_reset_public_url)
+        path = public_url.path.rstrip("/") + "/"
+        return urlunsplit(
+            (
+                public_url.scheme,
+                public_url.netloc,
+                path,
+                "",
+                f"reset-password={token}",
+            )
+        )
+
+    def _send_password_reset_email(
+        self,
+        recipient: str,
+        username: str,
+        reset_url: str,
+    ) -> None:
+        smtp_host = os.getenv("HNL_SMTP_HOST", "").strip()
+        smtp_username = os.getenv("HNL_SMTP_USERNAME", "").strip()
+        smtp_password = os.getenv("HNL_SMTP_PASSWORD", "")
+        smtp_sender = os.getenv("HNL_SMTP_FROM", smtp_username).strip()
+        use_ssl = os.getenv("HNL_SMTP_SSL", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        use_starttls = (
+            not use_ssl
+            and os.getenv("HNL_SMTP_STARTTLS", "1").lower()
+            in {"1", "true", "yes"}
+        )
+        try:
+            smtp_port = int(
+                os.getenv("HNL_SMTP_PORT", "465" if use_ssl else "587")
+            )
+            smtp_timeout = int(os.getenv("HNL_SMTP_TIMEOUT_SECONDS", "10"))
+        except ValueError:
+            LOGGER.error("Password reset SMTP port/timeout is not an integer.")
+            return
+        if (
+            not smtp_host
+            or not smtp_sender
+            or not 1 <= smtp_port <= 65_535
+            or not 1 <= smtp_timeout <= 60
+        ):
+            LOGGER.error(
+                "Password reset email is not configured; set HNL_SMTP_HOST "
+                "and HNL_SMTP_FROM with valid SMTP port/timeout values."
+            )
+            return
+
+        valid_for_minutes = max(1, self.password_reset_seconds // 60)
+        message = EmailMessage()
+        message["From"] = smtp_sender
+        message["To"] = recipient
+        message["Subject"] = "SHNL 36-0 — poništavanje lozinke"
+        message.set_content(
+            f"Pozdrav {username},\n\n"
+            "zaprimili smo zahtjev za postavljanje nove lozinke za tvoj "
+            "SHNL 36-0 račun.\n\n"
+            f"Otvori ovu poveznicu: {reset_url}\n\n"
+            f"Poveznica vrijedi {valid_for_minutes} minuta i može se "
+            "iskoristiti samo jednom. Ako nisi poslao/la ovaj zahtjev, "
+            "slobodno zanemari ovu poruku.\n"
+        )
+
+        tls_context = ssl.create_default_context()
+        if use_ssl:
+            with smtplib.SMTP_SSL(
+                smtp_host,
+                smtp_port,
+                timeout=smtp_timeout,
+                context=tls_context,
+            ) as smtp:
+                if smtp_username:
+                    smtp.login(smtp_username, smtp_password)
+                smtp.send_message(message)
+            return
+
+        with smtplib.SMTP(
+            smtp_host,
+            smtp_port,
+            timeout=smtp_timeout,
+        ) as smtp:
+            if use_starttls:
+                smtp.ehlo()
+                smtp.starttls(context=tls_context)
+                smtp.ehlo()
+            if smtp_username:
+                smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+
+    def _dispatch_password_reset_delivery(
+        self,
+        delivery: tuple[str, str, str] | None,
+    ) -> None:
+        # Always create the same lightweight background task so a slow SMTP
+        # server does not turn the generic response time into an account-
+        # enumeration signal. Unknown emails simply make the worker a no-op.
+        def deliver() -> None:
+            if delivery is None:
+                return
+            try:
+                self._password_reset_sender(*delivery)
+            except Exception:
+                # The public response must remain generic for both known and
+                # unknown accounts. Operators still get an actionable error.
+                LOGGER.exception("Password reset email delivery failed.")
+
+        threading.Thread(
+            target=deliver,
+            name="hnl-password-reset-delivery",
+            daemon=True,
+        ).start()
+
+    def request_password_reset(
+        self,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        if not isinstance(payload, Mapping):
+            raise RequestError(400, "invalid_payload", "JSON object required.")
+        email = _clean_email(payload.get("email"))
+        now = self.clock()
+        token: str | None = None
+        reset_url: str | None = None
+        delivery: tuple[str, str, str] | None = None
+        with self._transaction() as connection:
+            connection.execute(
+                "DELETE FROM password_reset_tokens "
+                "WHERE expires_at <= ? OR used_at IS NOT NULL",
+                (now,),
+            )
+            account = connection.execute(
+                "SELECT id, username, email FROM accounts "
+                "WHERE email = ? COLLATE NOCASE",
+                (email,),
+            ).fetchone()
+            if account:
+                latest = connection.execute(
+                    "SELECT created_at FROM password_reset_tokens "
+                    "WHERE account_id = ? AND used_at IS NULL "
+                    "AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+                    (account["id"], now),
+                ).fetchone()
+                # Do not invalidate a still-useful recovery link merely
+                # because somebody repeats the public request. A short
+                # account-level cooldown also prevents inbox flooding.
+                if not latest or float(latest["created_at"]) <= now - 60:
+                    token = secrets.token_urlsafe(32)
+                    reset_url = self._password_reset_link(token)
+                    connection.execute(
+                        "INSERT INTO password_reset_tokens "
+                        "(token_hash, account_id, created_at, expires_at, used_at) "
+                        "VALUES (?, ?, ?, ?, NULL)",
+                        (
+                            _sha256(token),
+                            account["id"],
+                            now,
+                            now + self.password_reset_seconds,
+                        ),
+                    )
+                    active_tokens = connection.execute(
+                        "SELECT token_hash FROM password_reset_tokens "
+                        "WHERE account_id = ? AND used_at IS NULL "
+                        "AND expires_at > ? ORDER BY created_at DESC",
+                        (account["id"], now),
+                    ).fetchall()
+                    stale_hashes = [
+                        row["token_hash"] for row in active_tokens[5:]
+                    ]
+                    if stale_hashes:
+                        connection.executemany(
+                            "UPDATE password_reset_tokens SET used_at = ? "
+                            "WHERE token_hash = ?",
+                            [(now, item_hash) for item_hash in stale_hashes],
+                        )
+                    delivery = (
+                        account["email"],
+                        account["username"],
+                        reset_url,
+                    )
+
+        self._dispatch_password_reset_delivery(delivery)
+        response: dict[str, Any] = {
+            "ok": True,
+            "message": PASSWORD_RESET_GENERIC_MESSAGE,
+        }
+        if self._password_reset_expose_token and token and reset_url:
+            response["resetToken"] = token
+            response["resetUrl"] = reset_url
+        return response
+
+    def complete_password_reset(
+        self,
+        payload: Mapping[str, Any],
+    ) -> dict[str, bool]:
+        if not isinstance(payload, Mapping):
+            raise RequestError(400, "invalid_payload", "JSON object required.")
+        token = payload.get("token")
+        if not isinstance(token, str) or not 32 <= len(token) <= 512:
+            raise RequestError(
+                400,
+                "invalid_reset_token",
+                "Reset link is invalid or has expired.",
+            )
+        token_hash = _sha256(token)
+        now = self.clock()
+
+        # Establish validity before doing expensive scrypt work, then check
+        # again in the write transaction to make one-time use race-safe.
+        with self._transaction() as connection:
+            reset_row = connection.execute(
+                "SELECT account_id FROM password_reset_tokens "
+                "WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?",
+                (token_hash, now),
+            ).fetchone()
+        if not reset_row:
+            raise RequestError(
+                400,
+                "invalid_reset_token",
+                "Reset link is invalid or has expired.",
+            )
+
+        account_id = reset_row["account_id"]
+        new_password = _registration_password(payload.get("newPassword"))
+        salt = secrets.token_hex(16)
+        password_hash = self._password_digest(new_password, salt)
+        completed_at = self.clock()
+        with self._transaction() as connection:
+            reset_row = connection.execute(
+                "SELECT account_id FROM password_reset_tokens "
+                "WHERE token_hash = ? AND account_id = ? "
+                "AND used_at IS NULL AND expires_at > ?",
+                (token_hash, account_id, completed_at),
+            ).fetchone()
+            if not reset_row:
+                raise RequestError(
+                    400,
+                    "invalid_reset_token",
+                    "Reset link is invalid or has expired.",
+                )
+            connection.execute(
+                "UPDATE accounts SET password_hash = ?, password_salt = ?, "
+                "password_n = ?, updated_at = ? WHERE id = ?",
+                (
+                    password_hash,
+                    salt,
+                    self.password_scrypt_n,
+                    completed_at,
+                    account_id,
+                ),
+            )
+            connection.execute(
+                "UPDATE password_reset_tokens SET used_at = ? "
+                "WHERE account_id = ? AND used_at IS NULL",
+                (completed_at, account_id),
+            )
+            connection.execute(
+                "DELETE FROM auth_sessions WHERE account_id = ?",
+                (account_id,),
+            )
+        return {"ok": True}
 
     def account_from_session(
         self,
@@ -4662,6 +4981,23 @@ class RoomsAPIHandler(BaseHTTPRequestHandler):
             parsed = urlsplit(self.path)
             parts = self._route_parts(parsed.path)
             payload = self._read_payload()
+            if parts == ["account", "password-reset", "request"]:
+                self._enforce_auth_rate_limit("password-reset-request")
+                self._send(
+                    HTTPStatus.ACCEPTED,
+                    self.store.request_password_reset(payload),
+                )
+                return
+            if parts == ["account", "password-reset", "complete"]:
+                self._enforce_auth_rate_limit("password-reset-complete")
+                self._send(
+                    200,
+                    self.store.complete_password_reset(payload),
+                    extra_headers={
+                        "Set-Cookie": self._auth_cookie("", clear=True),
+                    },
+                )
+                return
             if parts == ["account", "register"]:
                 self._enforce_auth_rate_limit("register")
                 response, session_token = self.store.register_account(payload)

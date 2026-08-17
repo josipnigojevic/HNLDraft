@@ -11,10 +11,21 @@ services:
       HNL_ROOMS_DB: /data/rooms.sqlite3
       HNL_CATALOG_PATH: /app/data/hnl_draft_catalog.json
       HNL_ALLOWED_ORIGINS: "https://${DOMAIN:?Set DOMAIN in .env.production},https://www.${DOMAIN:?Set DOMAIN in .env.production}"
+      HNL_PUBLIC_URL: "https://${DOMAIN:?Set DOMAIN in .env.production}"
       HNL_AUTH_PEPPER: "${HNL_AUTH_PEPPER:?Set HNL_AUTH_PEPPER in .env.production}"
       HNL_SECURE_COOKIES: "${HNL_SECURE_COOKIES:-1}"
       HNL_AUTH_SESSION_SECONDS: "${HNL_AUTH_SESSION_SECONDS:-2592000}"
       HNL_PASSWORD_SCRYPT_N: "${HNL_PASSWORD_SCRYPT_N:-131072}"
+      HNL_PASSWORD_RESET_SECONDS: "${HNL_PASSWORD_RESET_SECONDS:-1800}"
+      HNL_PASSWORD_RESET_EXPOSE_TOKEN: "0"
+      HNL_SMTP_HOST: "${HNL_SMTP_HOST:?Set HNL_SMTP_HOST in .env.production}"
+      HNL_SMTP_PORT: "${HNL_SMTP_PORT:-587}"
+      HNL_SMTP_USERNAME: "${HNL_SMTP_USERNAME:?Set HNL_SMTP_USERNAME in .env.production}"
+      HNL_SMTP_PASSWORD: "${HNL_SMTP_PASSWORD:?Set HNL_SMTP_PASSWORD in .env.production}"
+      HNL_SMTP_FROM: "${HNL_SMTP_FROM:?Set HNL_SMTP_FROM in .env.production}"
+      HNL_SMTP_STARTTLS: "${HNL_SMTP_STARTTLS:-1}"
+      HNL_SMTP_SSL: "${HNL_SMTP_SSL:-0}"
+      HNL_SMTP_TIMEOUT_SECONDS: "${HNL_SMTP_TIMEOUT_SECONDS:-10}"
       HNL_TRUST_PROXY: "1"
       HNL_AUTH_RATE_LIMIT_ATTEMPTS: "${HNL_AUTH_RATE_LIMIT_ATTEMPTS:-10}"
       HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS: "${HNL_AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}"
@@ -44,6 +55,7 @@ services:
       start_period: 10s
     networks:
       - app
+      - outbound
     logging: &production-logging
       driver: local
       options:
@@ -115,6 +127,9 @@ networks:
   edge:
   app:
     internal: true
+  # The API has no published port, but needs outbound DNS/TLS for the
+  # transactional SMTP provider used by password recovery.
+  outbound:
 
 volumes:
   hnl_rooms:

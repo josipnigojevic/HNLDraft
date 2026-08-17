@@ -404,14 +404,33 @@ type SpinStrip = {
 
 type SeasonPhase = "preview" | "running" | "final";
 type SimulationSpeed = "normal" | "fast";
-type AccountDialogMode = "login" | "register";
+type AccountDialogMode = "login" | "register" | "forgot" | "reset";
 
 type AccountFormState = {
   identifier: string;
   username: string;
   email: string;
   password: string;
+  passwordConfirmation: string;
+  resetToken: string;
 };
+
+type PasswordRecoveryResponse = {
+  ok?: boolean;
+  resetToken?: string | null;
+  resetUrl?: string | null;
+};
+
+const PASSWORD_RESET_FRAGMENT = "#reset-password=";
+
+function passwordResetTokenFromFragment(fragment: string) {
+  if (!fragment.startsWith(PASSWORD_RESET_FRAGMENT)) return "";
+  try {
+    return decodeURIComponent(fragment.slice(PASSWORD_RESET_FRAGMENT.length)).trim();
+  } catch {
+    return "";
+  }
+}
 
 type SetupState = {
   formation: string;
@@ -1494,6 +1513,7 @@ function AccountDialog({
   form,
   busy,
   error,
+  notice,
   onMode,
   onChange,
   onSubmit,
@@ -1503,12 +1523,30 @@ function AccountDialog({
   form: AccountFormState;
   busy: boolean;
   error: string;
+  notice: string;
   onMode: (mode: AccountDialogMode) => void;
   onChange: (field: keyof AccountFormState, value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
   const registering = mode === "register";
+  const forgotPassword = mode === "forgot";
+  const resettingPassword = mode === "reset";
+  const settingNewPassword = registering || resettingPassword;
+  const title = registering
+    ? "Sačuvaj svoju povijest."
+    : forgotPassword
+      ? "Vrati pristup računu."
+      : resettingPassword
+        ? "Postavi novu lozinku."
+        : "Dobrodošao natrag.";
+  const lead = registering
+    ? "Svaka sezona koju završiš dok si prijavljen ulazi u tvoju statistiku."
+    : forgotPassword
+      ? "Upiši e-mail računa i poslat ćemo ti poveznicu za postavljanje nove lozinke."
+      : resettingPassword
+        ? "Odaberi novu lozinku od najmanje 15 znakova za svoj SHNL 36-0 račun."
+        : "Prijavi se za pregled svih svojih momčadi, rezultata i rekorda.";
   return (
     <div
       className="account-modal-backdrop"
@@ -1526,39 +1564,47 @@ function AccountDialog({
           type="button"
           className="account-modal-close"
           onClick={onClose}
-          aria-label="Zatvori prozor za prijavu"
+          aria-label="Zatvori prozor računa"
         >
           ×
         </button>
         <p className="eyebrow">TVOJ SHNL 36-0 PROFIL</p>
-        <h2 id="account-dialog-title">
-          {registering ? "Sačuvaj svoju povijest." : "Dobrodošao natrag."}
-        </h2>
-        <p className="account-modal-lead">
-          {registering
-            ? "Svaka sezona koju završiš dok si prijavljen ulazi u tvoju statistiku."
-            : "Prijavi se za pregled svih svojih momčadi, rezultata i rekorda."}
-        </p>
-        <div className="account-mode-tabs" role="tablist" aria-label="Vrsta prijave">
+        <h2 id="account-dialog-title">{title}</h2>
+        <p className="account-modal-lead">{lead}</p>
+        {forgotPassword || resettingPassword ? (
           <button
             type="button"
-            role="tab"
-            aria-selected={!registering}
-            className={!registering ? "active" : ""}
+            className="account-back"
             onClick={() => onMode("login")}
           >
-            Prijava
+            ← Natrag na prijavu
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={registering}
-            className={registering ? "active" : ""}
-            onClick={() => onMode("register")}
+        ) : (
+          <div
+            className="account-mode-tabs"
+            role="tablist"
+            aria-label="Vrsta prijave"
           >
-            Novi račun
-          </button>
-        </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!registering}
+              className={!registering ? "active" : ""}
+              onClick={() => onMode("login")}
+            >
+              Prijava
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={registering}
+              className={registering ? "active" : ""}
+              onClick={() => onMode("register")}
+            >
+              Novi račun
+            </button>
+          </div>
+        )}
         <form className="account-form" onSubmit={onSubmit}>
           {registering ? (
             <>
@@ -1593,7 +1639,21 @@ function AccountDialog({
                 />
               </label>
             </>
-          ) : (
+          ) : forgotPassword ? (
+            <label htmlFor="account-recovery-email">
+              E-mail računa
+              <input
+                id="account-recovery-email"
+                type="email"
+                value={form.email}
+                onChange={(event) => onChange("email", event.target.value)}
+                autoComplete="email"
+                placeholder="ti@primjer.hr"
+                required
+                autoFocus
+              />
+            </label>
+          ) : resettingPassword ? null : (
             <label htmlFor="account-identifier">
               Korisničko ime ili e-mail
               <input
@@ -1607,22 +1667,72 @@ function AccountDialog({
               />
             </label>
           )}
-          <label htmlFor="account-password">
-            Lozinka
-            <input
-              id="account-password"
-              type="password"
-              value={form.password}
-              onChange={(event) => onChange("password", event.target.value)}
-              minLength={registering ? 15 : undefined}
-              maxLength={128}
-              autoComplete={registering ? "new-password" : "current-password"}
-              placeholder={
-                registering ? "Najmanje 15 znakova" : "Tvoja lozinka"
-              }
-              required
-            />
-          </label>
+          {!forgotPassword ? (
+            <>
+              <label htmlFor="account-password">
+                {resettingPassword ? "Nova lozinka" : "Lozinka"}
+                <input
+                  id="account-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => onChange("password", event.target.value)}
+                  minLength={settingNewPassword ? 15 : undefined}
+                  maxLength={128}
+                  autoComplete={
+                    settingNewPassword ? "new-password" : "current-password"
+                  }
+                  placeholder={
+                    settingNewPassword ? "Najmanje 15 znakova" : "Tvoja lozinka"
+                  }
+                  required
+                  autoFocus={resettingPassword}
+                />
+              </label>
+              {mode === "login" ? (
+                <div className="account-recovery-actions">
+                  {form.resetToken ? (
+                    <button
+                      type="button"
+                      className="account-forgot"
+                      onClick={() => onMode("reset")}
+                    >
+                      Nastavi promjenu lozinke
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="account-forgot"
+                    onClick={() => onMode("forgot")}
+                  >
+                    Zaboravili ste lozinku?
+                  </button>
+                </div>
+              ) : null}
+              {resettingPassword ? (
+                <label htmlFor="account-password-confirmation">
+                  Ponovi novu lozinku
+                  <input
+                    id="account-password-confirmation"
+                    type="password"
+                    value={form.passwordConfirmation}
+                    onChange={(event) =>
+                      onChange("passwordConfirmation", event.target.value)
+                    }
+                    minLength={15}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    placeholder="Ponovi novu lozinku"
+                    required
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
+          {notice ? (
+            <p className="account-form-notice" role="status">
+              {notice}
+            </p>
+          ) : null}
           {error ? (
             <p className="account-form-error" role="alert">
               {error}
@@ -1630,7 +1740,15 @@ function AccountDialog({
           ) : null}
           <button className="account-submit" type="submit" disabled={busy}>
             {busy
-              ? "Spremamo…"
+              ? forgotPassword
+                ? "Šaljemo…"
+                : resettingPassword
+                  ? "Mijenjamo…"
+                  : "Spremamo…"
+              : forgotPassword
+                ? "Pošalji poveznicu →"
+                : resettingPassword
+                  ? "Postavi novu lozinku →"
               : registering
                 ? "Izradi račun →"
                 : "Prijavi se →"}
@@ -2447,9 +2565,12 @@ export default function HnlDraftGame() {
     username: "",
     email: "",
     password: "",
+    passwordConfirmation: "",
+    resetToken: "",
   });
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState("");
+  const [accountNotice, setAccountNotice] = useState("");
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [accountHistory, setAccountHistory] =
     useState<AccountHistory | null>(null);
@@ -2572,6 +2693,25 @@ export default function HnlDraftGame() {
       if (invitedCode) setJoinCode(invitedCode.toUpperCase().slice(0, 6));
       const profileUsername = params.get("profile");
       if (profileUsername) void openPublicProfile(profileUsername);
+      const hasPasswordResetFragment = window.location.hash.startsWith(
+        PASSWORD_RESET_FRAGMENT,
+      );
+      const resetToken = passwordResetTokenFromFragment(window.location.hash);
+      if (hasPasswordResetFragment) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.hash = "";
+        window.history.replaceState({}, "", cleanUrl);
+      }
+      if (resetToken) {
+        setAccountForm((current) => ({
+          ...current,
+          password: "",
+          passwordConfirmation: "",
+          resetToken,
+        }));
+        setAccountDialogMode("reset");
+        setAccountDialogOpen(true);
+      }
 
       const saved = window.sessionStorage.getItem("hnl-room-session");
       if (saved) {
@@ -2629,7 +2769,16 @@ export default function HnlDraftGame() {
     if (!accountDialogOpen && !accountPanelOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (accountDialogOpen) setAccountDialogOpen(false);
+      if (accountDialogOpen) {
+        setAccountDialogOpen(false);
+        setAccountError("");
+        setAccountNotice("");
+        setAccountForm((current) => ({
+          ...current,
+          password: "",
+          passwordConfirmation: "",
+        }));
+      }
       if (accountPanelOpen) {
         setAccountPanelOpen(false);
         setSelectedHistoryId(null);
@@ -2861,8 +3010,9 @@ export default function HnlDraftGame() {
 
   const openAccountSurface = () => {
     setAccountError("");
+    setAccountNotice("");
     if (!account) {
-      setAccountDialogMode("login");
+      setAccountDialogMode(accountForm.resetToken ? "reset" : "login");
       setAccountDialogOpen(true);
       return;
     }
@@ -2888,8 +3038,87 @@ export default function HnlDraftGame() {
   const submitAccount = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAccountError("");
+    setAccountNotice("");
     setAccountBusy(true);
     try {
+      if (accountDialogMode === "forgot") {
+        const response = await apiRequest<PasswordRecoveryResponse>(
+          "/account/password-reset/request",
+          {
+            method: "POST",
+            body: JSON.stringify({ email: accountForm.email.trim() }),
+          },
+        );
+        let exposedResetToken = response.resetToken?.trim() ?? "";
+        if (!exposedResetToken && response.resetUrl) {
+          try {
+            exposedResetToken = passwordResetTokenFromFragment(
+              new URL(response.resetUrl, window.location.href).hash,
+            );
+          } catch {
+            exposedResetToken = "";
+          }
+        }
+        setAccountForm((current) => ({
+          ...current,
+          password: "",
+          passwordConfirmation: "",
+          resetToken: exposedResetToken || current.resetToken,
+        }));
+        if (exposedResetToken) {
+          setAccountDialogMode("reset");
+          setAccountNotice(
+            "Zahtjev je prihvaćen. U lokalnom razvoju možeš odmah postaviti novu lozinku.",
+          );
+        } else {
+          setAccountNotice(
+            "Ako račun s tim e-mailom postoji, poslat ćemo poveznicu za novu lozinku.",
+          );
+        }
+        return;
+      }
+
+      if (accountDialogMode === "reset") {
+        if (!accountForm.resetToken) {
+          throw new ApiError(
+            "Poveznica za promjenu lozinke nije valjana. Zatraži novu poveznicu.",
+            "invalid_password_reset_token",
+            400,
+          );
+        }
+        if (accountForm.password !== accountForm.passwordConfirmation) {
+          throw new ApiError(
+            "Upisane lozinke nisu jednake.",
+            "password_confirmation_mismatch",
+            400,
+          );
+        }
+        await apiRequest<{ ok?: boolean }>("/account/password-reset/complete", {
+          method: "POST",
+          body: JSON.stringify({
+            token: accountForm.resetToken,
+            newPassword: accountForm.password,
+          }),
+        });
+        setAccountForm((current) => ({
+          ...current,
+          password: "",
+          passwordConfirmation: "",
+          resetToken: "",
+        }));
+        setAccountDialogMode("login");
+        setAccount(null);
+        setAccountStats(null);
+        setAccountHistory(null);
+        setSelectedHistoryId(null);
+        setSelectedHistorySeason(null);
+        setAccountPanelOpen(false);
+        setAccountNotice(
+          "Lozinka je promijenjena. Sada se možeš prijaviti novom lozinkom.",
+        );
+        return;
+      }
+
       const registering = accountDialogMode === "register";
       const payload = registering
         ? {
@@ -2919,7 +3148,12 @@ export default function HnlDraftGame() {
       setAccount(nextAccount);
       setAccountStats(response.stats ?? nextAccount.stats ?? null);
       setManagerName((current) => current || nextAccount.username);
-      setAccountForm((current) => ({ ...current, password: "" }));
+      setAccountForm((current) => ({
+        ...current,
+        password: "",
+        passwordConfirmation: "",
+        resetToken: "",
+      }));
 
       if (room && participantToken) {
         try {
@@ -5233,9 +5467,23 @@ export default function HnlDraftGame() {
           form={accountForm}
           busy={accountBusy}
           error={accountError}
+          notice={accountNotice}
           onMode={(nextMode) => {
             setAccountDialogMode(nextMode);
             setAccountError("");
+            setAccountNotice("");
+            setAccountForm((current) => ({
+              ...current,
+              email:
+                nextMode === "forgot" &&
+                !current.email &&
+                current.identifier.includes("@")
+                  ? current.identifier
+                  : current.email,
+              password: "",
+              passwordConfirmation: "",
+              resetToken: current.resetToken,
+            }));
           }}
           onChange={(field, value) =>
             setAccountForm((current) => ({ ...current, [field]: value }))
@@ -5244,6 +5492,12 @@ export default function HnlDraftGame() {
           onClose={() => {
             setAccountDialogOpen(false);
             setAccountError("");
+            setAccountNotice("");
+            setAccountForm((current) => ({
+              ...current,
+              password: "",
+              passwordConfirmation: "",
+            }));
           }}
         />
       ) : null}
@@ -5269,9 +5523,10 @@ export default function HnlDraftGame() {
       ) : null}
       <footer className="site-footer">
         <p>
-          SHNL 36-0 je nezavisna fan-made HNL draft igra. Nije povezana s HNS-om,
-          klubovima, igračima ili pružateljima ocjena. Grbovi se prikazuju
-          isključivo radi identifikacije i ostaju vlasništvo svojih nositelja.
+          SHNL 36-0 je nezavisna fan-made HNL draft igra koju je napravio Josip
+          Nigojević. Nije povezana s HNS-om, klubovima, igračima ili pružateljima
+          ocjena. Grbovi se prikazuju isključivo radi identifikacije i ostaju
+          vlasništvo svojih nositelja.
         </p>
         <span>Podaci: HNS Riznica / COMET + sekundarni povijesni izvori</span>
       </footer>
